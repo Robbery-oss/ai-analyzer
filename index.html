@@ -37,7 +37,7 @@
 </head>
 <body>
     <div class="container">
-        <h2 style="margin-bottom: 5px;">Нейросеть V2.3</h2>
+        <h2 style="margin-bottom: 5px;">Нейросеть V2.5</h2>
         <p style="color: #8e8e93; font-size: 14px; margin-top: 0;">Интеллектуальный анализ матчей</p>
         
         <select id="sport-select">
@@ -139,7 +139,6 @@
                 const textNoSpaces = text.replace(/\s+/g, '');
                 loadingBox.style.display = 'none';
 
-                // 1. Улучшенная защита от дурака: ищем слова из ставок или формат кэфов (1.85, 2.10 и тд)
                 const hasBettingMarkers = /(тотал|фора|победа|ничья|коэф|исход|кэф|тб|тм|больше|меньше|матч|\d[\.,]\d{2})/i.test(text);
 
                 if (textNoSpaces.length < 15 || !hasBettingMarkers) {
@@ -147,17 +146,28 @@
                     analyzeBtn.style.display = 'block';
                     analyzeBtn.innerText = "🔄 Попробовать еще раз";
                 } else {
-                    // 2. Пытаемся вытащить названия команд (слова с большой буквы от 4 символов)
-                    const words = text.match(/[А-ЯЁA-Z][а-яёa-z]{3,}/g) || [];
-                    const stopWords = ['Тотал', 'Фора', 'Победа', 'Ничья', 'Матч', 'Тайм', 'Больше', 'Меньше', 'Коэффициент', 'Исход', 'Событие', 'Линия', 'Меньше', 'Ординар', 'Экспресс'];
-                    const possibleTeams = words.filter(w => !stopWords.includes(w));
+                    const words = text.match(/[А-ЯЁA-Z][а-яёa-z]{2,}|[А-ЯЁA-Z]{2,}/g) || [];
+                    const stopWords = ['Тотал', 'Фора', 'Победа', 'Ничья', 'Матч', 'Тайм', 'Больше', 'Меньше', 'Коэффициент', 'Исход', 'Событие', 'Линия', 'Ординар', 'Экспресс', 'Команда', 'Коменда', 'Результат', 'Основное', 'Время', 'Двойной', 'Шанс', 'Угловые', 'Голы', 'Счет', 'Хозяева', 'Гости', 'Все', 'Основные', 'Таймы', 'Рекомендации', 'Данный', 'Или', 'Нет', 'Да', 'Выиграла', 'Сыграла', 'Клубы', 'Клубные', 'Товарищеские'];
+                    const stopWordsUpper = stopWords.map(w => w.toUpperCase());
+
+                    const validWords = words.filter(w => !stopWordsUpper.includes(w.toUpperCase()));
+
+                    const wordCounts = {};
+                    validWords.forEach(w => {
+                        const upper = w.toUpperCase();
+                        if (!wordCounts[upper]) {
+                            wordCounts[upper] = { count: 0, original: w };
+                        }
+                        wordCounts[upper].count++;
+                    });
+
+                    const sortedWords = Object.values(wordCounts).sort((a, b) => b.count - a.count);
                     
                     let matchName = "Анализ скрытого события"; 
-                    if (possibleTeams.length >= 2) {
-                        // Берем первые два найденных слова как команды
-                        matchName = `${possibleTeams[0]} — ${possibleTeams[1]}`;
-                    } else if (possibleTeams.length === 1) {
-                        matchName = `Матч с участием: ${possibleTeams[0]}`;
+                    if (sortedWords.length >= 2) {
+                        matchName = `${sortedWords[0].original} — ${sortedWords[1].original}`;
+                    } else if (sortedWords.length === 1) {
+                        matchName = `Матч с участием: ${sortedWords[0].original}`;
                     }
 
                     generatePrediction(sportSelect.value, matchName);
@@ -169,7 +179,6 @@
             }
         });
 
-        // Конструктор прогнозов
         function generatePrediction(sport, matchName) {
             const intros = [
                 "Данные успешно верифицированы. Найден оптимальный паттерн.",
@@ -185,11 +194,10 @@
                 'esports': ["Победа 1 на первой карте", "Тотал карт Больше (2.5)", "Фора 2 (+1.5)"]
             };
 
-            // 3. Серьезные, развернутые объяснения только для основного прогноза
             const deepExplanations = [
-                "Аналитический модуль сопоставил показатели ожидаемых голов (xG/xPts), индекс усталости ключевых игроков и историю очных встреч за последние 3 года. Выявлена критическая уязвимость в линии защиты, что в 82% подобных сценариев приводит к уверенному проходу данного исхода.",
+                "Аналитический модуль сопоставил показатели ожидаемых голов (xG/xPts), индекс усталости ключевых игроков и историю очных встреч. Выявлена критическая уязвимость в линии защиты, что в 82% подобных сценариев приводит к уверенному проходу данного исхода.",
                 "Нейросеть зафиксировала сильный дисбаланс в распределении денежных потоков (прогруз). Вкупе с математической моделью текущей формы команд, алгоритм определяет этот исход как максимально валуйный с минимальной маржой риска для игрока.",
-                "Алгоритм проанализировал микротравмы основного состава и тактический рисунок тренеров в последних 5 матчах. Исторические статистические паттерны показывают, что при подобной расстановке сил данный исход пробивается с вероятностью, сильно превышающей расчеты букмекера."
+                "Алгоритм проанализировал микротравмы основного состава и тактический рисунок тренеров в последних матчах. Исторические статистические паттерны показывают, что при подобной расстановке сил данный исход пробивается с вероятностью, сильно превышающей расчеты букмекера."
             ];
 
             const selectedIntro = intros[Math.floor(Math.random() * intros.length)];
@@ -223,12 +231,16 @@
                     </div>
                 </div>
 
-                <div style="border: 1px solid #333; padding: 12px; border-radius: 8px; background: rgba(255, 69, 58, 0.05);">
+                <div style="border: 1px solid #333; padding: 12px; border-radius: 8px; margin-bottom: 15px; background: rgba(255, 69, 58, 0.05);">
                     <div style="font-size: 12px; color: #ff453a; text-transform: uppercase; font-weight: bold; margin-bottom: 8px;">🔥 Альтернативный риск-исход</div>
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <span style="font-size: 15px; font-weight: bold; color: #fff;">${outcome2}</span>
                         <span style="color: #ffd60a; font-weight: bold; font-size: 16px;">${prob2}%</span>
                     </div>
+                </div>
+
+                <div style="margin-top: 10px; font-size: 13px; color: #ffd60a; font-weight: bold; text-align: center; background: rgba(255, 214, 10, 0.1); padding: 12px; border-radius: 8px; border: 1px dashed #ffd60a;">
+                    🎁 При регистрации используйте промокод: <span style="font-size: 18px; color: #fff; margin-left: 5px;">SOTNI</span>
                 </div>
             `;
 
@@ -236,9 +248,11 @@
             resultBox.innerHTML = resultHTML;
             resultBox.style.display = 'block';
 
-            tg.MainButton.text = "ЗАКРЫТЬ И СДЕЛАТЬ СТАВКУ";
+            tg.MainButton.text = "СДЕЛАТЬ СТАВКУ (ПРОМО: SOTNI)";
             tg.MainButton.show();
-            tg.MainButton.onClick(() => tg.close());
+            tg.MainButton.onClick(() => {
+                tg.openLink("https://lkhv.pro/66ca12");
+            });
         }
     </script>
 </body>

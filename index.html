@@ -176,7 +176,7 @@
             }
         });
 
-        // Конструктор уникальных прогнозов
+        // Конструктор уникальных прогнозов (Двойной исход)
         function generatePrediction(sport) {
             // 1. Случайное вступление
             const intros = [
@@ -185,33 +185,55 @@
                 "Глубокий анализ завершен. Выявлен валуйный исход."
             ];
             
-            // 2. Случайные исходы в зависимости от спорта
+            // 2. База исходов
             const outcomes = {
-                'football': ["Тотал Больше (2.5)", "Обе забьют: Да", "Фора 1 (0)", "Тотал Меньше (3.5)", "Индивидуальный Тотал 1 Больше (1)"],
-                'hockey': ["Тотал Больше (4.5)", "Победа в матче 1", "Фора 2 (+1.5)", "Тотал Меньше (6.5)"],
+                'football': ["Тотал Больше (2.5)", "Обе забьют: Да", "Фора 1 (0)", "Тотал Меньше (3.5)", "Индивидуальный Тотал 1 Больше (1.5)", "Победа 1"],
+                'hockey': ["Тотал Больше (4.5)", "Победа в матче 1", "Фора 2 (+1.5)", "Тотал Меньше (6.5)", "Обе забьют: Да"],
                 'basketball': ["Фора 1 (-5.5)", "Тотал Больше", "Индивидуальный тотал 2 Меньше", "Победа 1 с учетом ОТ"],
                 'tennis': ["Победа 1", "Тотал геймов Больше (21.5)", "Фора 2 (+3.5)", "Точный счет 2:0"],
                 'esports': ["Победа 1 на первой карте", "Тотал карт Больше (2.5)", "Фора 2 (+1.5)"]
             };
 
-            const selectedIntros = intros[Math.floor(Math.random() * intros.length)];
+            const selectedIntro = intros[Math.floor(Math.random() * intros.length)];
             const availableOutcomes = outcomes[sport] || outcomes['football'];
-            const selectedOutcome = availableOutcomes[Math.floor(Math.random() * availableOutcomes.length)];
             
-            // 3. Случайная уверенность (от 78 до 94%)
-            const probability = Math.floor(Math.random() * (94 - 78 + 1)) + 78;
+            // Перемешиваем исходы, чтобы взять два разных
+            const shuffled = availableOutcomes.sort(() => 0.5 - Math.random());
+            const outcome1 = shuffled[0];
+            const outcome2 = shuffled[1];
+            
+            // Генерируем вероятности
+            const prob1 = Math.floor(Math.random() * (94 - 82 + 1)) + 82; // Надежный: 82-94%
+            const prob2 = Math.floor(Math.random() * (75 - 60 + 1)) + 60; // Рискованный: 60-75%
 
-            // Вставляем данные в HTML
-            document.getElementById('res-intro').innerText = selectedIntros;
-            document.getElementById('res-prob').innerText = probability + '%';
-            document.getElementById('res-outcome').innerText = selectedOutcome;
+            // Собираем новую красивую верстку с двумя карточками
+            const resultHTML = `
+                <h3 class="result-title" style="color: #32d74b; margin-top: 0; font-size: 18px; text-align: center;">✅ Анализ завершен</h3>
+                <div style="color: #8e8e93; font-size: 13px; text-align: center; margin-bottom: 15px;">${selectedIntro}</div>
+                
+                <div style="border: 1px solid #333; padding: 12px; border-radius: 8px; margin-bottom: 10px; background: rgba(10, 132, 255, 0.05);">
+                    <div style="font-size: 12px; color: #0a84ff; text-transform: uppercase; font-weight: bold; margin-bottom: 8px;">🎯 Основной прогноз</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 15px; font-weight: bold; color: #fff;">${outcome1}</span>
+                        <span style="color: #32d74b; font-weight: bold; font-size: 16px;">${prob1}%</span>
+                    </div>
+                </div>
 
+                <div style="border: 1px solid #333; padding: 12px; border-radius: 8px; background: rgba(255, 69, 58, 0.05);">
+                    <div style="font-size: 12px; color: #ff453a; text-transform: uppercase; font-weight: bold; margin-bottom: 8px;">🔥 Рискованный исход</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 15px; font-weight: bold; color: #fff;">${outcome2}</span>
+                        <span style="color: #ffd60a; font-weight: bold; font-size: 16px;">${prob2}%</span>
+                    </div>
+                </div>
+            `;
+
+            // Вставляем результат на страницу
+            const resultBox = document.getElementById('result');
+            resultBox.innerHTML = resultHTML;
             resultBox.style.display = 'block';
 
-            tg.MainButton.text = "Закрыть и сделать ставку";
+            tg.MainButton.text = "ЗАКРЫТЬ И СДЕЛАТЬ СТАВКУ";
             tg.MainButton.show();
             tg.MainButton.onClick(() => tg.close());
         }
-    </script>
-</body>
-</html>

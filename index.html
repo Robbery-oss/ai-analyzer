@@ -3,77 +3,54 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Analytics</title>
-    <!-- Подключаем библиотеку Telegram для Mini Apps -->
+    <title>AI Analytics PRO</title>
+    <!-- Библиотека Telegram -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Библиотека для считывания текста с картинок (OCR) -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
     <style>
-        /* Базовый дизайн: темная тема, скругленные углы */
         body {
-            background-color: var(--tg-theme-bg-color, #1c1c1e);
+            background-color: var(--tg-theme-bg-color, #131415);
             color: var(--tg-theme-text-color, #ffffff);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             padding: 20px;
             text-align: center;
+            margin: 0;
         }
-        .container {
-            max-width: 400px;
-            margin: 0 auto;
-        }
+        .container { max-width: 400px; margin: 0 auto; }
         select, .upload-btn, .submit-btn {
-            width: 100%;
-            padding: 15px;
-            margin: 10px 0;
-            border-radius: 12px;
-            border: none;
-            font-size: 16px;
-            box-sizing: border-box;
+            width: 100%; padding: 16px; margin: 10px 0;
+            border-radius: 12px; border: none; font-size: 16px; box-sizing: border-box;
         }
-        select {
-            background-color: #2c2c2e;
-            color: white;
-            outline: none;
-        }
-        .upload-btn {
-            background-color: #3a3a3c;
-            color: #0a84ff;
-            cursor: pointer;
-            display: inline-block;
-        }
-        .submit-btn {
-            background-color: #0a84ff;
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-            display: none; /* Прячем кнопку до загрузки фото */
-        }
-        input[type="file"] {
-            display: none;
-        }
-        #preview {
-            max-width: 100%;
-            border-radius: 12px;
-            margin-top: 15px;
-            display: none;
-            border: 2px solid #3a3a3c;
-        }
-        .result-box {
-            background-color: #2c2c2e;
-            padding: 15px;
-            border-radius: 12px;
-            margin-top: 20px;
-            display: none;
-            border: 1px solid #0a84ff;
-        }
+        select { background-color: #232427; color: white; outline: none; border: 1px solid #333; }
+        .upload-btn { background-color: #232427; color: #0a84ff; cursor: pointer; display: inline-block; border: 1px solid #333;}
+        .submit-btn { background-color: #0a84ff; color: white; font-weight: bold; cursor: pointer; display: none; }
+        input[type="file"] { display: none; }
+        #preview { max-width: 100%; border-radius: 12px; margin-top: 15px; display: none; border: 1px solid #333; }
+        
+        /* Стили для прогресс-бара и загрузки */
+        #loading-box { display: none; margin-top: 20px; }
+        .progress-container { background-color: #232427; border-radius: 10px; width: 100%; height: 10px; margin-top: 10px; overflow: hidden; }
+        .progress-bar { background-color: #0a84ff; width: 0%; height: 100%; transition: width 0.3s ease; }
+        #status-text { color: #8e8e93; font-size: 14px; margin-top: 10px; }
+        
+        /* Стили для результатов и ошибок */
+        .result-box { background-color: #1c1c1e; padding: 20px; border-radius: 12px; margin-top: 20px; display: none; border: 1px solid #32d74b; text-align: left; }
+        .error-box { background-color: #2d1a1c; padding: 15px; border-radius: 12px; margin-top: 20px; display: none; border: 1px solid #ff453a; color: #ff453a; }
+        
+        .result-title { color: #32d74b; margin-top: 0; font-size: 18px; text-align: center; }
+        .result-item { margin: 10px 0; font-size: 15px; padding-bottom: 10px; border-bottom: 1px solid #333;}
+        .result-item:last-child { border-bottom: none; }
+        .highlight { color: #0a84ff; font-weight: bold; font-size: 18px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>Анализ матча</h2>
-        <p style="color: #8e8e93; font-size: 14px;">Выберите спорт и загрузите скриншот</p>
+        <h2 style="margin-bottom: 5px;">Нейросеть V2.1</h2>
+        <p style="color: #8e8e93; font-size: 14px; margin-top: 0;">Интеллектуальный анализ матчей</p>
         
-        <!-- Выбор спорта -->
         <select id="sport-select">
-            <option value="" disabled selected>🏆 Выберите дисциплину</option>
+            <option value="" disabled selected>🏆 Выберите спорт</option>
             <option value="football">⚽ Футбол</option>
             <option value="hockey">🏒 Хоккей</option>
             <option value="basketball">🏀 Баскетбол</option>
@@ -81,81 +58,160 @@
             <option value="esports">🎮 Киберспорт</option>
         </select>
 
-        <!-- Загрузка скриншота -->
         <label class="upload-btn">
-            📸 Загрузить скриншот
+            📸 Загрузить скриншот линии
             <input type="file" id="image-upload" accept="image/*">
         </label>
         
-        <!-- Место для показа загруженной картинки -->
-        <img id="preview" src="" alt="Ваш скриншот">
-
-        <!-- Кнопка анализа -->
-        <button class="submit-btn" id="analyze-btn">Запустить AI-анализ</button>
+        <img id="preview" src="" alt="Скриншот">
+        <button class="submit-btn" id="analyze-btn">🚀 Запустить сканирование</button>
         
-        <!-- Блок с результатом (появится позже) -->
-        <div class="result-box" id="result"></div>
+        <!-- Блок загрузки (Иллюзия работы) -->
+        <div id="loading-box">
+            <div id="status-text">Инициализация модулей...</div>
+            <div class="progress-container">
+                <div class="progress-bar" id="progress-bar"></div>
+            </div>
+        </div>
+        
+        <!-- Блок ошибки -->
+        <div class="error-box" id="error-box">
+            <b>⚠️ Ошибка сканирования</b><br><br>
+            На скриншоте не найдено достаточно данных для анализа. Пожалуйста, загрузите четкое изображение, где хорошо видно команды и коэффициенты.
+        </div>
+
+        <!-- Блок результата -->
+        <div class="result-box" id="result">
+            <h3 class="result-title">✅ Анализ завершен</h3>
+            <div class="result-item" id="res-intro" style="color: #8e8e93; font-size: 13px; text-align: center;"></div>
+            <div class="result-item">Вероятность прохода: <span id="res-prob" style="float: right; color: #ffd60a; font-weight: bold;"></span></div>
+            <div class="result-item">Рекомендация ИИ:<br><span id="res-outcome" class="highlight" style="display: block; margin-top: 5px; text-align: center;"></span></div>
+        </div>
     </div>
 
     <script>
-        // Инициализация Telegram Web App
         let tg = window.Telegram.WebApp;
-        tg.expand(); // Открываем приложение на весь экран телефона
+        tg.expand();
 
         const sportSelect = document.getElementById('sport-select');
         const imageUpload = document.getElementById('image-upload');
         const preview = document.getElementById('preview');
         const analyzeBtn = document.getElementById('analyze-btn');
+        
+        const loadingBox = document.getElementById('loading-box');
+        const progressBar = document.getElementById('progress-bar');
+        const statusText = document.getElementById('status-text');
+        const errorBox = document.getElementById('error-box');
         const resultBox = document.getElementById('result');
 
-        // Логика: когда пользователь выбрал картинку
+        let imageFile = null;
+
+        // Показ картинки и кнопки
         imageUpload.addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (file) {
+                imageFile = file;
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     preview.src = e.target.result;
                     preview.style.display = 'block';
-                    checkInputs(); // Проверяем, можно ли показать кнопку
+                    errorBox.style.display = 'none';
+                    resultBox.style.display = 'none';
+                    checkInputs();
                 }
                 reader.readAsDataURL(file);
             }
         });
 
-        // Логика: когда пользователь выбрал спорт
         sportSelect.addEventListener('change', checkInputs);
 
-        // Функция проверки: если выбран спорт и загружено фото -> показываем кнопку
         function checkInputs() {
             if (sportSelect.value && imageUpload.files.length > 0) {
                 analyzeBtn.style.display = 'block';
             }
         }
 
-        // Логика: что происходит при нажатии на "Запустить анализ"
-        analyzeBtn.addEventListener('click', function() {
-            analyzeBtn.innerText = 'Анализирую данные... ⏳';
-            analyzeBtn.disabled = true;
-            analyzeBtn.style.opacity = '0.7';
+        // Запуск анализа
+        analyzeBtn.addEventListener('click', async function() {
+            analyzeBtn.style.display = 'none';
+            loadingBox.style.display = 'block';
+            errorBox.style.display = 'none';
+            progressBar.style.width = '0%';
             
-            // Имитация работы нейросети (задержка 3 секунды)
-            setTimeout(() => {
-                analyzeBtn.style.display = 'none';
-                resultBox.style.display = 'block';
-                
-                // Текст успешного сигнала
-                resultBox.innerHTML = `
-                    <h3 style="color: #32d74b; margin-top: 0;">✅ Сигнал найден!</h3>
-                    <p><b>Вероятность:</b> 89%</p>
-                    <p><b>Исход:</b> Тотал Больше (2.5)</p>
-                `;
-                
-                // Показываем главную кнопку закрытия от самого Telegram
-                tg.MainButton.text = "Закрыть анализатор";
-                tg.MainButton.show();
-                tg.MainButton.onClick(() => tg.close());
-            }, 3000);
+            try {
+                // Запускаем реальный сканер текста (OCR)
+                const result = await Tesseract.recognize(imageFile, 'rus+eng', {
+                    logger: m => {
+                        if (m.status === 'recognizing text') {
+                            let pct = Math.floor(m.progress * 100);
+                            progressBar.style.width = pct + '%';
+                            
+                            // Динамическая смена текста статуса
+                            if (pct < 30) statusText.innerText = "Сканирование структуры изображения...";
+                            else if (pct < 60) statusText.innerText = "Извлечение текстовых данных...";
+                            else if (pct < 90) statusText.innerText = "Подключение к базе статистики...";
+                            else statusText.innerText = "Формирование нейронного прогноза...";
+                        }
+                    }
+                });
+
+                // Убираем пробелы и проверяем длину найденного текста
+                const extractedText = result.data.text.replace(/\s+/g, '');
+                loadingBox.style.display = 'none';
+
+                // Защита от дурака: если букв меньше 10, выдаем ошибку
+                if (extractedText.length < 10) {
+                    errorBox.style.display = 'block';
+                    analyzeBtn.style.display = 'block';
+                    analyzeBtn.innerText = "🔄 Попробовать еще раз";
+                } else {
+                    // Если текст есть, генерируем прогноз
+                    generatePrediction(sportSelect.value);
+                }
+            } catch (err) {
+                // Если OCR сломался, всё равно имитируем ошибку качества картинки
+                loadingBox.style.display = 'none';
+                errorBox.style.display = 'block';
+                analyzeBtn.style.display = 'block';
+            }
         });
+
+        // Конструктор уникальных прогнозов
+        function generatePrediction(sport) {
+            // 1. Случайное вступление
+            const intros = [
+                "Данные успешно синхронизированы. Найден оптимальный паттерн.",
+                "Алгоритм сопоставил историю встреч. Фиксируем аномалию в линии.",
+                "Глубокий анализ завершен. Выявлен валуйный исход."
+            ];
+            
+            // 2. Случайные исходы в зависимости от спорта
+            const outcomes = {
+                'football': ["Тотал Больше (2.5)", "Обе забьют: Да", "Фора 1 (0)", "Тотал Меньше (3.5)", "Индивидуальный Тотал 1 Больше (1)"],
+                'hockey': ["Тотал Больше (4.5)", "Победа в матче 1", "Фора 2 (+1.5)", "Тотал Меньше (6.5)"],
+                'basketball': ["Фора 1 (-5.5)", "Тотал Больше", "Индивидуальный тотал 2 Меньше", "Победа 1 с учетом ОТ"],
+                'tennis': ["Победа 1", "Тотал геймов Больше (21.5)", "Фора 2 (+3.5)", "Точный счет 2:0"],
+                'esports': ["Победа 1 на первой карте", "Тотал карт Больше (2.5)", "Фора 2 (+1.5)"]
+            };
+
+            const selectedIntros = intros[Math.floor(Math.random() * intros.length)];
+            const availableOutcomes = outcomes[sport] || outcomes['football'];
+            const selectedOutcome = availableOutcomes[Math.floor(Math.random() * availableOutcomes.length)];
+            
+            // 3. Случайная уверенность (от 78 до 94%)
+            const probability = Math.floor(Math.random() * (94 - 78 + 1)) + 78;
+
+            // Вставляем данные в HTML
+            document.getElementById('res-intro').innerText = selectedIntros;
+            document.getElementById('res-prob').innerText = probability + '%';
+            document.getElementById('res-outcome').innerText = selectedOutcome;
+
+            resultBox.style.display = 'block';
+
+            tg.MainButton.text = "Закрыть и сделать ставку";
+            tg.MainButton.show();
+            tg.MainButton.onClick(() => tg.close());
+        }
     </script>
 </body>
 </html>

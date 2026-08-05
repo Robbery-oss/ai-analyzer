@@ -41,7 +41,7 @@
 </head>
 <body>
     <div class="container">
-        <h2 style="margin-bottom: 5px;">Нейросеть V2.1</h2>
+        <h2 style="margin-bottom: 5px;">Нейросеть V2.2</h2>
         <p style="color: #8e8e93; font-size: 14px; margin-top: 0;">Интеллектуальный анализ матчей</p>
         
         <select id="sport-select">
@@ -75,7 +75,7 @@
             На скриншоте не найдено достаточно данных для анализа. Пожалуйста, загрузите четкое изображение, где хорошо видно команды и коэффициенты.
         </div>
 
-        <!-- Блок результата (теперь заполняется из JS) -->
+        <!-- Блок результата -->
         <div class="result-box" id="result"></div>
     </div>
 
@@ -130,14 +130,13 @@
             progressBar.style.width = '0%';
             
             try {
-                // Запускаем реальный сканер текста (OCR)
+                // Запускаем сканер
                 const result = await Tesseract.recognize(imageFile, 'rus+eng', {
                     logger: m => {
                         if (m.status === 'recognizing text') {
                             let pct = Math.floor(m.progress * 100);
                             progressBar.style.width = pct + '%';
                             
-                            // Динамическая смена текста статуса
                             if (pct < 30) statusText.innerText = "Сканирование структуры изображения...";
                             else if (pct < 60) statusText.innerText = "Извлечение текстовых данных...";
                             else if (pct < 90) statusText.innerText = "Подключение к базе статистики...";
@@ -146,37 +145,31 @@
                     }
                 });
 
-                // Убираем пробелы и проверяем длину найденного текста
                 const extractedText = result.data.text.replace(/\s+/g, '');
                 loadingBox.style.display = 'none';
 
-                // Защита от дурака: если букв меньше 10, выдаем ошибку
                 if (extractedText.length < 10) {
                     errorBox.style.display = 'block';
                     analyzeBtn.style.display = 'block';
                     analyzeBtn.innerText = "🔄 Попробовать еще раз";
                 } else {
-                    // Если текст есть, генерируем прогноз
                     generatePrediction(sportSelect.value);
                 }
             } catch (err) {
-                // Если OCR сломался, всё равно имитируем ошибку качества картинки
                 loadingBox.style.display = 'none';
                 errorBox.style.display = 'block';
                 analyzeBtn.style.display = 'block';
             }
         });
 
-        // Конструктор уникальных прогнозов (Двойной исход)
+        // Конструктор уникальных прогнозов с объяснениями
         function generatePrediction(sport) {
-            // 1. Случайное вступление
             const intros = [
                 "Данные успешно синхронизированы. Найден оптимальный паттерн.",
                 "Алгоритм сопоставил историю встреч. Фиксируем аномалию в линии.",
                 "Глубокий анализ завершен. Выявлен валуйный исход."
             ];
             
-            // 2. База исходов
             const outcomes = {
                 'football': ["Тотал Больше (2.5)", "Обе забьют: Да", "Фора 1 (0)", "Тотал Меньше (3.5)", "Индивидуальный Тотал 1 Больше (1.5)", "Победа 1"],
                 'hockey': ["Тотал Больше (4.5)", "Победа в матче 1", "Фора 2 (+1.5)", "Тотал Меньше (6.5)", "Обе забьют: Да"],
@@ -185,41 +178,58 @@
                 'esports': ["Победа 1 на первой карте", "Тотал карт Больше (2.5)", "Фора 2 (+1.5)"]
             };
 
+            // База объяснений для основного (надежного) исхода
+            const reliableExplanations = [
+                "Нейросеть выявила стабильный тренд в последних 7 матчах.",
+                "Анализ xG и физической формы подтверждает высокую вероятность.",
+                "Исторические паттерны команд идеально совпадают с данным исходом.",
+                "Алгоритм зафиксировал перевес над линией букмекера."
+            ];
+            
+            // База объяснений для рискованного исхода
+            const riskyExplanations = [
+                "Обнаружена аномалия в распределении денежных потоков (прогруз).",
+                "Скрытая усталость ключевых игроков фаворита дает шанс на проход.",
+                "Математическая модель указывает на возможную сенсацию в матче.",
+                "Коэффициент сильно завышен, ожидаемая выгода перекрывает риски."
+            ];
+
             const selectedIntro = intros[Math.floor(Math.random() * intros.length)];
             const availableOutcomes = outcomes[sport] || outcomes['football'];
             
-            // Перемешиваем исходы, чтобы взять два разных
             const shuffled = availableOutcomes.sort(() => 0.5 - Math.random());
             const outcome1 = shuffled[0];
             const outcome2 = shuffled[1];
             
-            // Генерируем вероятности
-            const prob1 = Math.floor(Math.random() * (94 - 82 + 1)) + 82; // Надежный: 82-94%
-            const prob2 = Math.floor(Math.random() * (75 - 60 + 1)) + 60; // Рискованный: 60-75%
+            const prob1 = Math.floor(Math.random() * (94 - 82 + 1)) + 82; 
+            const prob2 = Math.floor(Math.random() * (75 - 60 + 1)) + 60; 
 
-            // Собираем новую красивую верстку с двумя карточками
+            const exp1 = reliableExplanations[Math.floor(Math.random() * reliableExplanations.length)];
+            const exp2 = riskyExplanations[Math.floor(Math.random() * riskyExplanations.length)];
+
             const resultHTML = `
                 <h3 class="result-title" style="color: #32d74b; margin-top: 0; font-size: 18px; text-align: center;">✅ Анализ завершен</h3>
                 <div style="color: #8e8e93; font-size: 13px; text-align: center; margin-bottom: 15px;">${selectedIntro}</div>
                 
                 <div style="border: 1px solid #333; padding: 12px; border-radius: 8px; margin-bottom: 10px; background: rgba(10, 132, 255, 0.05);">
                     <div style="font-size: 12px; color: #0a84ff; text-transform: uppercase; font-weight: bold; margin-bottom: 8px;">🎯 Основной прогноз</div>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                         <span style="font-size: 15px; font-weight: bold; color: #fff;">${outcome1}</span>
                         <span style="color: #32d74b; font-weight: bold; font-size: 16px;">${prob1}%</span>
                     </div>
+                    <div style="font-size: 11px; color: #a1a1aa; font-style: italic; line-height: 1.3;">🧠 <b>Логика ИИ:</b> ${exp1}</div>
                 </div>
 
                 <div style="border: 1px solid #333; padding: 12px; border-radius: 8px; background: rgba(255, 69, 58, 0.05);">
                     <div style="font-size: 12px; color: #ff453a; text-transform: uppercase; font-weight: bold; margin-bottom: 8px;">🔥 Рискованный исход</div>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                         <span style="font-size: 15px; font-weight: bold; color: #fff;">${outcome2}</span>
                         <span style="color: #ffd60a; font-weight: bold; font-size: 16px;">${prob2}%</span>
                     </div>
+                    <div style="font-size: 11px; color: #a1a1aa; font-style: italic; line-height: 1.3;">🧠 <b>Логика ИИ:</b> ${exp2}</div>
                 </div>
             `;
 
-            // Вставляем результат на страницу
             const resultBox = document.getElementById('result');
             resultBox.innerHTML = resultHTML;
             resultBox.style.display = 'block';

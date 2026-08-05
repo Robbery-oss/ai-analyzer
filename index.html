@@ -37,11 +37,6 @@
         /* Стили для результатов и ошибок */
         .result-box { background-color: #1c1c1e; padding: 20px; border-radius: 12px; margin-top: 20px; display: none; border: 1px solid #32d74b; text-align: left; }
         .error-box { background-color: #2d1a1c; padding: 15px; border-radius: 12px; margin-top: 20px; display: none; border: 1px solid #ff453a; color: #ff453a; }
-        
-        .result-title { color: #32d74b; margin-top: 0; font-size: 18px; text-align: center; }
-        .result-item { margin: 10px 0; font-size: 15px; padding-bottom: 10px; border-bottom: 1px solid #333;}
-        .result-item:last-child { border-bottom: none; }
-        .highlight { color: #0a84ff; font-weight: bold; font-size: 18px; }
     </style>
 </head>
 <body>
@@ -80,13 +75,8 @@
             На скриншоте не найдено достаточно данных для анализа. Пожалуйста, загрузите четкое изображение, где хорошо видно команды и коэффициенты.
         </div>
 
-        <!-- Блок результата -->
-        <div class="result-box" id="result">
-            <h3 class="result-title">✅ Анализ завершен</h3>
-            <div class="result-item" id="res-intro" style="color: #8e8e93; font-size: 13px; text-align: center;"></div>
-            <div class="result-item">Вероятность прохода: <span id="res-prob" style="float: right; color: #ffd60a; font-weight: bold;"></span></div>
-            <div class="result-item">Рекомендация ИИ:<br><span id="res-outcome" class="highlight" style="display: block; margin-top: 5px; text-align: center;"></span></div>
-        </div>
+        <!-- Блок результата (теперь заполняется из JS) -->
+        <div class="result-box" id="result"></div>
     </div>
 
     <script>
@@ -136,6 +126,7 @@
             analyzeBtn.style.display = 'none';
             loadingBox.style.display = 'block';
             errorBox.style.display = 'none';
+            resultBox.style.display = 'none';
             progressBar.style.width = '0%';
             
             try {
@@ -237,3 +228,6 @@
             tg.MainButton.show();
             tg.MainButton.onClick(() => tg.close());
         }
+    </script>
+</body>
+</html>

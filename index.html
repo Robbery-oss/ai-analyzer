@@ -156,34 +156,41 @@
                 const rawText = result.data.text;
                 loadingBox.style.display = 'none';
 
-                // Жесткий фильтр: удаляем все спецсимволы, оставляем только буквы и пробелы
-                const cleanText = rawText.replace(/[^a-zA-Zа-яА-ЯёЁ\s\-]/g, ' ');
+                // 1. Разбиваем распознанный текст на отдельные строки
+                const lines = rawText.split('\n');
+                const validTeams = [];
 
-                // Разбиваем на слова
-                const words = cleanText.match(/[А-ЯЁA-Z][а-яёa-z]{2,}|[А-ЯЁA-Z]{2,}/g) || [];
-                
-                // Расширенный список стоп-слов, чтобы игнорировать элементы интерфейса телефона/сайта
-                const stopWords = ['Тотал', 'Фора', 'Победа', 'Ничья', 'Матч', 'Тайм', 'Меню', 'Главная', 'Казино', 'Спорт', 'Купон', 'Все', 'Основные', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек', 'Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл'];
-                const stopWordsUpper = stopWords.map(w => w.toUpperCase());
+                // 2. Слова из меню 1win, которые скрипт должен игнорировать
+                const navWords = ['все', 'основные', 'тоталы', 'форы', 'таймы', 'угловые', 'карточки', 'голы', 'счёт', 'хозяева', 'гости', 'комбо'];
 
-                const validWords = words.filter(w => !stopWordsUpper.includes(w.toUpperCase()));
+                for (let line of lines) {
+                    // Шаг А: Срезаем время (напр. 18:00) и дату (напр. 6 авг 2026 г...)
+                    // Это спасает команду КуПС от склеивания с датой
+                    let cleanLine = line.replace(/\d{1,2}:\d{2}/g, '')
+                                        .replace(/\d{1,2}\s+(авг|сен|окт|ноя|дек|янв|фев|мар|апр|май|июн|июл).*/gi, '');
+                    
+                    // Шаг Б: Жесткая очистка. Оставляем только буквы, пробелы и дефисы
+                    cleanLine = cleanLine.replace(/[^a-zA-Zа-яА-ЯёЁ\s\-]/g, ' ').replace(/\s+/g, ' ').trim();
 
-                const wordCounts = {};
-                validWords.forEach(w => {
-                    const upper = w.toUpperCase();
-                    if (!wordCounts[upper]) {
-                        wordCounts[upper] = { count: 0, original: w };
-                    }
-                    wordCounts[upper].count++;
-                });
+                    // Шаг В: Пропускаем случайные огрызки текста (меньше 3 букв)
+                    // Но 'КуПС' (4 буквы) пройдет эту проверку
+                    if (cleanLine.length < 3) continue;
 
-                const sortedWords = Object.values(wordCounts).sort((a, b) => b.count - a.count);
-                
+                    // Шаг Г: Проверяем, не является ли эта строка кнопками навигации
+                    let lowerLine = cleanLine.toLowerCase();
+                    let isNav = navWords.some(w => lowerLine.includes(w));
+                    if (isNav) continue;
+
+                    // Добавляем очищенную строку как название команды
+                    validTeams.push(cleanLine);
+                }
+
+                // Шаг 3: Собираем заголовок из первых двух найденных строк
                 let matchName = "Анализ скрытого события"; 
-                if (sortedWords.length >= 2) {
-                    matchName = `${sortedWords[0].original} — ${sortedWords[1].original}`;
-                } else if (sortedWords.length === 1) {
-                    matchName = `Матч с участием: ${sortedWords[0].original}`;
+                if (validTeams.length >= 2) {
+                    matchName = `${validTeams[0]} — ${validTeams[1]}`;
+                } else if (validTeams.length === 1) {
+                    matchName = `Матч с участием: ${validTeams[0]}`;
                 }
 
                 // Даже если ничего не найдено, мы все равно выдаем результат, 

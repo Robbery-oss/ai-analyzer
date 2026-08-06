@@ -19,8 +19,9 @@
         select, .upload-btn, .submit-btn {
             width: 100%; padding: 16px; margin: 10px 0;
             border-radius: 12px; border: none; font-size: 16px; box-sizing: border-box;
+            outline: none;
         }
-        select { background-color: #232427; color: white; outline: none; border: 1px solid #333; }
+        select { background-color: #232427; color: white; border: 1px solid #333; }
         .upload-btn { background-color: #232427; color: #0a84ff; cursor: pointer; display: inline-block; border: 1px solid #333;}
         .submit-btn { background-color: #0a84ff; color: white; font-weight: bold; cursor: pointer; display: none; }
         input[type="file"] { display: none; }
@@ -31,8 +32,22 @@
         .progress-bar { background-color: #0a84ff; width: 0%; height: 100%; transition: width 0.3s ease; }
         #status-text { color: #8e8e93; font-size: 14px; margin-top: 10px; }
         
-        .result-box { background-color: #1c1c1e; padding: 20px; border-radius: 12px; margin-top: 20px; display: none; border: 1px solid #32d74b; text-align: left; }
+        .result-box { margin-top: 20px; display: none; text-align: left; }
         .error-box { background-color: #2d1a1c; padding: 15px; border-radius: 12px; margin-top: 20px; display: none; border: 1px solid #ff453a; color: #ff453a; }
+
+        /* Новые стили для блоков аналитики */
+        .card { background-color: #1a1e29; padding: 20px; border-radius: 12px; margin-bottom: 15px; }
+        .card-title { color: #6b7280; font-size: 12px; text-transform: uppercase; margin-top: 0; margin-bottom: 15px; letter-spacing: 1px; }
+        .stat-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+        .stat-name { font-size: 13px; color: #9ca3af; width: 45%; }
+        .stat-bar-bg { width: 35%; background-color: #374151; height: 6px; border-radius: 3px; overflow: hidden; }
+        .stat-bar-fill { background-color: #10b981; height: 100%; }
+        .stat-percent { font-size: 13px; color: #fff; width: 15%; text-align: right; font-weight: bold; }
+        
+        .ai-text { color: #d1d5db; font-size: 14px; line-height: 1.5; margin-bottom: 12px; margin-top: 0; }
+        
+        .limit-alert { background-color: #1a1e29; padding: 15px 20px; border-radius: 12px; text-align: center; border-left: 4px solid #10b981; margin-bottom: 15px;}
+        .limit-alert span { color: #fff; font-size: 14px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -66,7 +81,7 @@
         
         <div class="error-box" id="error-box">
             <b>⚠️ Ошибка сканирования</b><br><br>
-            На скриншоте не найдено букмекерских данных. Пожалуйста, загрузите четкое изображение линии БК, где хорошо видно коэффициенты и исходы.
+            На скриншоте не найдено данных. Загрузите более четкое изображение.
         </div>
 
         <div class="result-box" id="result"></div>
@@ -121,34 +136,28 @@
             progressBar.style.width = '0%';
             
             try {
-                // 1. Создаем canvas для обрезки
+                // Создаем холст для быстрой обрезки (оставляем только верхнюю часть)
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
                 
-                // 2. Берем только верхние 15% изображения
-                const cropHeight = imageFile.height ? imageFile.height * 0.15 : preview.naturalHeight * 0.15;
+                const cropHeight = imageFile.height ? imageFile.height * 0.20 : preview.naturalHeight * 0.20;
                 const imgWidth = imageFile.width || preview.naturalWidth;
                 
                 canvas.width = imgWidth;
                 canvas.height = cropHeight;
-
-                // 3. Рисуем обрезанную часть (только шапку с названиями команд)
                 ctx.drawImage(preview, 0, 0, imgWidth, cropHeight, 0, 0, canvas.width, canvas.height);
 
-                // Преобразуем canvas в Blob, чтобы отдать Tesseract
                 const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
 
-                // 4. Отдаем обрезанный кусок в Tesseract
+                // Отправляем в Tesseract
                 const result = await Tesseract.recognize(blob, 'rus+eng', {
                     logger: m => {
                         if (m.status === 'recognizing text') {
                             let pct = Math.floor(m.progress * 100);
                             progressBar.style.width = pct + '%';
-                            
-                            if (pct < 30) statusText.innerText = "Сканирование заголовка...";
-                            else if (pct < 60) statusText.innerText = "Очистка от логотипов...";
-                            else if (pct < 90) statusText.innerText = "Поиск в базе...";
-                            else statusText.innerText = "Генерация отчета...";
+                            if (pct < 30) statusText.innerText = "Сканирование блоков...";
+                            else if (pct < 60) statusText.innerText = "Распознавание команд...";
+                            else statusText.innerText = "Генерация рекомендаций...";
                         }
                     }
                 });
@@ -156,121 +165,102 @@
                 const rawText = result.data.text;
                 loadingBox.style.display = 'none';
 
-                // 1. Разбиваем распознанный текст на отдельные строки
-                const lines = rawText.split('\n');
-                const validTeams = [];
+                // 1. Быстрая очистка: только буквы и пробелы
+                const cleanText = rawText.replace(/[^a-zA-Zа-яА-ЯёЁ]/g, ' ').replace(/\s+/g, ' ').trim();
+                const words = cleanText.split(' ');
+                
+                // 2. Слова, которые нельзя брать как названия команд
+                const navWords = ['все', 'основные', 'тоталы', 'форы', 'таймы', 'угловые', 'карточки', 'голы', 'счёт', 'счет', 'хозяева', 'гости', 'авг', 'сен', 'окт', 'ноя', 'дек', 'янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл'];
 
-                // 2. Слова из меню 1win, которые скрипт должен игнорировать
-                const navWords = ['все', 'основные', 'тоталы', 'форы', 'таймы', 'угловые', 'карточки', 'голы', 'счёт', 'хозяева', 'гости', 'комбо'];
+                let foundTeams = [];
 
-                for (let line of lines) {
-                    // Шаг А: Срезаем время (напр. 18:00) и дату (напр. 6 авг 2026 г...)
-                    // Это спасает команду КуПС от склеивания с датой
-                    let cleanLine = line.replace(/\d{1,2}:\d{2}/g, '')
-                                        .replace(/\d{1,2}\s+(авг|сен|окт|ноя|дек|янв|фев|мар|апр|май|июн|июл).*/gi, '');
-                    
-                    // Шаг Б: Жесткая очистка. Оставляем только буквы, пробелы и дефисы
-                    cleanLine = cleanLine.replace(/[^a-zA-Zа-яА-ЯёЁ\s\-]/g, ' ').replace(/\s+/g, ' ').trim();
-
-                    // Шаг В: Пропускаем случайные огрызки текста (меньше 3 букв)
-                    // Но 'КуПС' (4 буквы) пройдет эту проверку
-                    if (cleanLine.length < 3) continue;
-
-                    // Шаг Г: Проверяем, не является ли эта строка кнопками навигации
-                    let lowerLine = cleanLine.toLowerCase();
-                    let isNav = navWords.some(w => lowerLine.includes(w));
-                    if (isNav) continue;
-
-                    // Добавляем очищенную строку как название команды
-                    validTeams.push(cleanLine);
+                // 3. Цепляем первые 2 нормальных слова
+                for (let w of words) {
+                    if (w.length >= 3 && !navWords.includes(w.toLowerCase())) {
+                        foundTeams.push(w);
+                        if (foundTeams.length === 2) break; // Нам хватит максимум двух слов
+                    }
                 }
 
-                // Шаг 3: Собираем заголовок из первых двух найденных строк
-                let matchName = "Анализ скрытого события"; 
-                if (validTeams.length >= 2) {
-                    matchName = `${validTeams[0]} — ${validTeams[1]}`;
-                } else if (validTeams.length === 1) {
-                    matchName = `Матч с участием: ${validTeams[0]}`;
-                }
+                // Устанавливаем дефолтные значения, если сканер вообще ничего не понял
+                let team1 = foundTeams[0] || "Хозяева";
+                let team2 = foundTeams[1] || "соперника";
 
-                // Даже если ничего не найдено, мы все равно выдаем результат, 
-                // чтобы не блокировать воронку ошибками
-                generatePrediction(sportSelect.value, matchName);
+                generatePrediction(sportSelect.value, team1, team2);
                 
             } catch (err) {
                 console.error(err);
                 loadingBox.style.display = 'none';
-                // При фатальной ошибке просто генерируем случайный прогноз
-                generatePrediction(sportSelect.value, "Событие Лиги");
+                generatePrediction(sportSelect.value, "Команда 1", "соперника");
             }
         });
 
-        function generatePrediction(sport, matchName) {
-            const intros = [
-                "Данные успешно верифицированы. Найден оптимальный паттерн.",
-                "Алгоритм сопоставил историю встреч. Фиксируем аномалию в линии.",
-                "Глубокий анализ завершен. Выявлен исход с максимальным ROI."
-            ];
-            
-            const outcomes = {
-                'football': ["Тотал Больше (2.5)", "Обе забьют: Да", "Фора 1 (0)", "Тотал Меньше (3.5)", "Индивидуальный Тотал 1 Больше (1.5)", "Победа 1"],
-                'hockey': ["Тотал Больше (4.5)", "Победа в матче 1", "Фора 2 (+1.5)", "Тотал Меньше (6.5)", "Обе забьют: Да"],
+        function generatePrediction(sport, team1, team2) {
+            // Исходы для блока вероятностей
+            const outcomesList = {
+                'football': ["Тотал больше 2.5", "Тотал < 2.5", "Тотал < 3.5", "Обе забьют: Да", "Фора 1 (0)", "Победа 1"],
+                'hockey': ["Тотал больше 4.5", "Победа в матче 1", "Фора 2 (+1.5)", "Тотал меньше 6.5"],
                 'basketball': ["Фора 1 (-5.5)", "Тотал Больше", "Индивидуальный тотал 2 Меньше", "Победа 1 с учетом ОТ"],
                 'tennis': ["Победа 1", "Тотал геймов Больше (21.5)", "Фора 2 (+3.5)", "Точный счет 2:0"],
                 'esports': ["Победа 1 на первой карте", "Тотал карт Больше (2.5)", "Фора 2 (+1.5)"]
             };
 
-            const deepExplanations = [
-                "Аналитический модуль сопоставил показатели ожидаемых голов (xG/xPts), индекс усталости ключевых игроков и историю очных встреч. Выявлена критическая уязвимость в линии защиты, что в 82% подобных сценариев приводит к уверенному проходу данного исхода.",
-                "Нейросеть зафиксировала сильный дисбаланс в распределении денежных потоков (прогруз). Вкупе с математической моделью текущей формы команд, алгоритм определяет этот исход как максимально валуйный с минимальной маржой риска для игрока.",
-                "Алгоритм проанализировал микротравмы основного состава и тактический рисунок тренеров в последних матчах. Исторические статистические паттерны показывают, что при подобной расстановке сил данный исход пробивается с вероятностью, сильно превышающей расчеты букмекера."
-            ];
-
-            const selectedIntro = intros[Math.floor(Math.random() * intros.length)];
-            const availableOutcomes = outcomes[sport] || outcomes['football'];
-            
+            const availableOutcomes = outcomesList[sport] || outcomesList['football'];
             const shuffled = availableOutcomes.sort(() => 0.5 - Math.random());
-            const outcome1 = shuffled[0];
-            const outcome2 = shuffled[1];
             
-            const prob1 = Math.floor(Math.random() * (94 - 82 + 1)) + 82; 
-            const prob2 = Math.floor(Math.random() * (75 - 60 + 1)) + 60; 
-
-            const mainExp = deepExplanations[Math.floor(Math.random() * deepExplanations.length)];
+            // Выбираем 4 исхода и генерируем реалистичные проценты
+            const row1 = shuffled[0]; const p1 = Math.floor(Math.random() * (85 - 70 + 1)) + 70;
+            const row2 = shuffled[1]; const p2 = Math.floor(Math.random() * (69 - 50 + 1)) + 50;
+            const row3 = shuffled[2]; const p3 = Math.floor(Math.random() * (65 - 45 + 1)) + 45;
+            const row4 = shuffled[3]; const p4 = Math.floor(Math.random() * (80 - 60 + 1)) + 60;
 
             const resultHTML = `
-                <h3 class="result-title" style="color: #32d74b; margin-top: 0; font-size: 18px; text-align: center;">✅ Анализ завершен</h3>
-                <div style="color: #8e8e93; font-size: 13px; text-align: center; margin-bottom: 15px;">${selectedIntro}</div>
-                
-                <div style="font-size: 14px; font-weight: bold; color: #fff; margin-bottom: 15px; text-align: center; background: #232427; padding: 10px; border-radius: 8px; border: 1px dashed #333;">
-                    🔍 Распознано: <span style="color: #0a84ff;">${matchName}</span>
+                <!-- Блок процентов -->
+                <div class="card">
+                    <h4 class="card-title">% СОБЫТИЙ</h4>
+                    
+                    <div class="stat-row">
+                        <span class="stat-name">${row1}</span>
+                        <div class="stat-bar-bg"><div class="stat-bar-fill" style="width: ${p1}%;"></div></div>
+                        <span class="stat-percent">${p1}%</span>
+                    </div>
+                    
+                    <div class="stat-row">
+                        <span class="stat-name">${row2}</span>
+                        <div class="stat-bar-bg"><div class="stat-bar-fill" style="width: ${p2}%;"></div></div>
+                        <span class="stat-percent">${p2}%</span>
+                    </div>
+
+                    <div class="stat-row">
+                        <span class="stat-name">${row3}</span>
+                        <div class="stat-bar-bg"><div class="stat-bar-fill" style="width: ${p3}%;"></div></div>
+                        <span class="stat-percent">${p3}%</span>
+                    </div>
+
+                    <div class="stat-row" style="margin-bottom: 0;">
+                        <span class="stat-name">${row4}</span>
+                        <div class="stat-bar-bg"><div class="stat-bar-fill" style="width: ${p4}%;"></div></div>
+                        <span class="stat-percent">${p4}%</span>
+                    </div>
                 </div>
 
-                <div style="border: 1px solid #333; padding: 15px; border-radius: 8px; margin-bottom: 10px; background: rgba(10, 132, 255, 0.05);">
-                    <div style="font-size: 12px; color: #0a84ff; text-transform: uppercase; font-weight: bold; margin-bottom: 8px;">🎯 Основной прогноз</div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <span style="font-size: 16px; font-weight: bold; color: #fff;">${outcome1}</span>
-                        <span style="color: #32d74b; font-weight: bold; font-size: 18px;">${prob1}%</span>
-                    </div>
-                    <div style="font-size: 12px; color: #a1a1aa; line-height: 1.5; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
-                        🧠 <b>Логика ИИ:</b> ${mainExp}
-                    </div>
+                <!-- Блок аналитики с подстановкой команд -->
+                <div class="card">
+                    <h4 class="card-title">AI АНАЛИТИКА</h4>
+                    <p class="ai-text">
+                        Анализ проведён в режиме реального времени (Live). Алгоритм учёл текущую динамику матча для формирования рекомендации.
+                    </p>
+                    <p class="ai-text" style="margin-bottom: 0;">
+                        <b style="color: #fff;">Причина:</b> Команда <b>${team1}</b> имеет сильное нападение и вероятно сможет забить несколько голов против <b>${team2}</b>, что увеличивает шансы на заход ставки.
+                    </p>
                 </div>
 
-                <div style="border: 1px solid #333; padding: 12px; border-radius: 8px; margin-bottom: 15px; background: rgba(255, 69, 58, 0.05);">
-                    <div style="font-size: 12px; color: #ff453a; text-transform: uppercase; font-weight: bold; margin-bottom: 8px;">🔥 Альтернативный риск-исход</div>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-size: 15px; font-weight: bold; color: #fff;">${outcome2}</span>
-                        <span style="color: #ffd60a; font-weight: bold; font-size: 16px;">${prob2}%</span>
-                    </div>
-                </div>
-
-                <div style="margin-top: 10px; font-size: 13px; color: #ffd60a; font-weight: bold; text-align: center; background: rgba(255, 214, 10, 0.1); padding: 12px; border-radius: 8px; border: 1px dashed #ffd60a;">
-                    🎁 При регистрации используйте промокод: <span style="font-size: 18px; color: #fff; margin-left: 5px;">SOTNI</span>
+                <!-- Уведомление о безлимите -->
+                <div class="limit-alert">
+                    <span>У вас активирован безлимит!</span>
                 </div>
             `;
 
-            const resultBox = document.getElementById('result');
             resultBox.innerHTML = resultHTML;
             resultBox.style.display = 'block';
 

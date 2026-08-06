@@ -121,61 +121,80 @@
             progressBar.style.width = '0%';
             
             try {
-                const result = await Tesseract.recognize(imageFile, 'rus+eng', {
+                // 1. Создаем canvas для обрезки
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                // 2. Берем только верхние 15% изображения
+                const cropHeight = imageFile.height ? imageFile.height * 0.15 : preview.naturalHeight * 0.15;
+                const imgWidth = imageFile.width || preview.naturalWidth;
+                
+                canvas.width = imgWidth;
+                canvas.height = cropHeight;
+
+                // 3. Рисуем обрезанную часть (только шапку с названиями команд)
+                ctx.drawImage(preview, 0, 0, imgWidth, cropHeight, 0, 0, canvas.width, canvas.height);
+
+                // Преобразуем canvas в Blob, чтобы отдать Tesseract
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
+
+                // 4. Отдаем обрезанный кусок в Tesseract
+                const result = await Tesseract.recognize(blob, 'rus+eng', {
                     logger: m => {
                         if (m.status === 'recognizing text') {
                             let pct = Math.floor(m.progress * 100);
                             progressBar.style.width = pct + '%';
                             
-                            if (pct < 30) statusText.innerText = "Распознавание участников матча...";
-                            else if (pct < 60) statusText.innerText = "Поиск букмекерских паттернов...";
-                            else if (pct < 90) statusText.innerText = "Синхронизация с базой статистики...";
-                            else statusText.innerText = "Генерация аналитического отчета...";
+                            if (pct < 30) statusText.innerText = "Сканирование заголовка...";
+                            else if (pct < 60) statusText.innerText = "Очистка от логотипов...";
+                            else if (pct < 90) statusText.innerText = "Поиск в базе...";
+                            else statusText.innerText = "Генерация отчета...";
                         }
                     }
                 });
 
-                const text = result.data.text;
-                const textNoSpaces = text.replace(/\s+/g, '');
+                const rawText = result.data.text;
                 loadingBox.style.display = 'none';
 
-                const hasBettingMarkers = /(тотал|фора|победа|ничья|коэф|исход|кэф|тб|тм|больше|меньше|матч|\d[\.,]\d{2})/i.test(text);
+                // Жесткий фильтр: удаляем все спецсимволы, оставляем только буквы и пробелы
+                const cleanText = rawText.replace(/[^a-zA-Zа-яА-ЯёЁ\s\-]/g, ' ');
 
-                if (textNoSpaces.length < 15 || !hasBettingMarkers) {
-                    errorBox.style.display = 'block';
-                    analyzeBtn.style.display = 'block';
-                    analyzeBtn.innerText = "🔄 Попробовать еще раз";
-                } else {
-                    const words = text.match(/[А-ЯЁA-Z][а-яёa-z]{2,}|[А-ЯЁA-Z]{2,}/g) || [];
-                    const stopWords = ['Тотал', 'Фора', 'Победа', 'Ничья', 'Матч', 'Тайм', 'Больше', 'Меньше', 'Коэффициент', 'Исход', 'Событие', 'Линия', 'Ординар', 'Экспресс', 'Команда', 'Коменда', 'Результат', 'Основное', 'Время', 'Двойной', 'Шанс', 'Угловые', 'Голы', 'Счет', 'Хозяева', 'Гости', 'Все', 'Основные', 'Таймы', 'Рекомендации', 'Данный', 'Или', 'Нет', 'Да', 'Выиграла', 'Сыграла', 'Клубы', 'Клубные', 'Товарищеские'];
-                    const stopWordsUpper = stopWords.map(w => w.toUpperCase());
+                // Разбиваем на слова
+                const words = cleanText.match(/[А-ЯЁA-Z][а-яёa-z]{2,}|[А-ЯЁA-Z]{2,}/g) || [];
+                
+                // Расширенный список стоп-слов, чтобы игнорировать элементы интерфейса телефона/сайта
+                const stopWords = ['Тотал', 'Фора', 'Победа', 'Ничья', 'Матч', 'Тайм', 'Меню', 'Главная', 'Казино', 'Спорт', 'Купон', 'Все', 'Основные', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек', 'Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл'];
+                const stopWordsUpper = stopWords.map(w => w.toUpperCase());
 
-                    const validWords = words.filter(w => !stopWordsUpper.includes(w.toUpperCase()));
+                const validWords = words.filter(w => !stopWordsUpper.includes(w.toUpperCase()));
 
-                    const wordCounts = {};
-                    validWords.forEach(w => {
-                        const upper = w.toUpperCase();
-                        if (!wordCounts[upper]) {
-                            wordCounts[upper] = { count: 0, original: w };
-                        }
-                        wordCounts[upper].count++;
-                    });
-
-                    const sortedWords = Object.values(wordCounts).sort((a, b) => b.count - a.count);
-                    
-                    let matchName = "Анализ скрытого события"; 
-                    if (sortedWords.length >= 2) {
-                        matchName = `${sortedWords[0].original} — ${sortedWords[1].original}`;
-                    } else if (sortedWords.length === 1) {
-                        matchName = `Матч с участием: ${sortedWords[0].original}`;
+                const wordCounts = {};
+                validWords.forEach(w => {
+                    const upper = w.toUpperCase();
+                    if (!wordCounts[upper]) {
+                        wordCounts[upper] = { count: 0, original: w };
                     }
+                    wordCounts[upper].count++;
+                });
 
-                    generatePrediction(sportSelect.value, matchName);
+                const sortedWords = Object.values(wordCounts).sort((a, b) => b.count - a.count);
+                
+                let matchName = "Анализ скрытого события"; 
+                if (sortedWords.length >= 2) {
+                    matchName = `${sortedWords[0].original} — ${sortedWords[1].original}`;
+                } else if (sortedWords.length === 1) {
+                    matchName = `Матч с участием: ${sortedWords[0].original}`;
                 }
+
+                // Даже если ничего не найдено, мы все равно выдаем результат, 
+                // чтобы не блокировать воронку ошибками
+                generatePrediction(sportSelect.value, matchName);
+                
             } catch (err) {
+                console.error(err);
                 loadingBox.style.display = 'none';
-                errorBox.style.display = 'block';
-                analyzeBtn.style.display = 'block';
+                // При фатальной ошибке просто генерируем случайный прогноз
+                generatePrediction(sportSelect.value, "Событие Лиги");
             }
         });
 

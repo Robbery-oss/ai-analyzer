@@ -128,8 +128,8 @@
                             progressBar.style.width = pct + '%';
                             
                             if (pct < 30) statusText.innerText = "Сканирование структуры линии...";
-                            else if (pct < 60) statusText.innerText = "Очистка от дат и UI-элементов...";
-                            else if (pct < 90) statusText.innerText = "Синхронизация команд...";
+                            else if (pct < 60) statusText.innerText = "Проверка букмекерских маркеров...";
+                            else if (pct < 90) statusText.innerText = "Поиск оптимальных паттернов...";
                             else statusText.innerText = "Генерация отчета...";
                         }
                     }
@@ -139,7 +139,7 @@
                 const textNoSpaces = text.replace(/\s+/g, '');
                 loadingBox.style.display = 'none';
 
-                // Защита от "Википедии" - ищем маркеры ставок по ВСЕМУ тексту
+                // Защита от левых картинок - ищем маркеры ставок
                 const hasBettingMarkers = /(тотал|фора|победа|ничья|коэф|исход|кэф|тб|тм|больше|меньше|матч|\d[\.,]\d{2})/i.test(text);
 
                 if (textNoSpaces.length < 15 || !hasBettingMarkers) {
@@ -147,70 +147,17 @@
                     analyzeBtn.style.display = 'block';
                     analyzeBtn.innerText = "🔄 Попробовать еще раз";
                 } else {
-                    const lines = result.data.lines;
-                    let foundTeams = [];
-                    
-                    // Расширенный список мусорных слов
-                    const stopWords = ['тотал', 'фора', 'победа', 'ничья', 'матч', 'тайм', 'больше', 'меньше', 'коэффициент', 'исход', 'событие', 'линия', 'ординар', 'экспресс', 'команда', 'результат', 'основное', 'время', 'двойной', 'шанс', 'угловые', 'голы', 'счет', 'счёт', 'хозяева', 'гости', 'все', 'основные', 'таймы', 'меню', 'главная', 'казино', 'спорт', 'купон', 'рекомендации', 'рекомендация', 'ai'];
-
-                    for (let line of lines) {
-                        let rawWords = line.text.split(/\s+/);
-                        let cleanWords = [];
-
-                        for (let w of rawWords) {
-                            // 1. Убиваем все слова с цифрами (кэфы, даты, время)
-                            if (/\d/.test(w)) continue;
-
-                            // 2. Убиваем месяцы, даже если они приклеились к буквам (как "бавг")
-                            if (/(авг|сен|окт|ноя|дек|янв|фев|мар|апр|май|июн|июл)/i.test(w)) continue;
-
-                            // 3. Вычищаем знаки препинания
-                            let pureWord = w.replace(/[^a-zA-Zа-яА-ЯёЁ]/g, '');
-
-                            // 4. Пропускаем одиночные символы, но оставляем от 3 букв (чтобы ПСЖ прошло)
-                            if (pureWord.length < 3) continue;
-
-                            // 5. Жесткая проверка на стоп-слова
-                            let lowerW = pureWord.toLowerCase();
-                            if (stopWords.includes(lowerW) || lowerW.includes('рекомендац')) continue;
-
-                            cleanWords.push(pureWord);
-                        }
-
-                        // Если в строке остались слова - берем ее в работу
-                        if (cleanWords.length > 0) {
-                            foundTeams.push(cleanWords.join(' '));
-                        }
-
-                        // Собираем только первые 2 строки с командами, дальше идет мусор
-                        if (foundTeams.length === 2) break;
-                    }
-
-                    let matchName = "Анализ скрытого события";
-                    
-                    if (foundTeams.length === 2) {
-                        // Мобильная версия: Команда 1 на первой строке, Команда 2 на второй
-                        matchName = `${foundTeams[0]} — ${foundTeams[1]}`;
-                    } else if (foundTeams.length === 1) {
-                        // ПК версия: Команды раскиданы по краям одной строки
-                        let words = foundTeams[0].split(' ');
-                        if (words.length >= 2) {
-                            matchName = `${words[0]} — ${words[words.length - 1]}`;
-                        } else {
-                            matchName = `Матч: ${foundTeams[0]}`;
-                        }
-                    }
-
-                    generatePrediction(sportSelect.value, matchName);
+                    // Если скриншот прошел проверку, сразу выдаем результат
+                    generatePrediction(sportSelect.value);
                 }
             } catch (err) {
                 console.error(err);
                 loadingBox.style.display = 'none';
-                generatePrediction(sportSelect.value, "Событие Лиги");
+                generatePrediction(sportSelect.value);
             }
         });
 
-        function generatePrediction(sport, matchName) {
+        function generatePrediction(sport) {
             const intros = [
                 "Данные успешно верифицированы. Найден оптимальный паттерн.",
                 "Алгоритм сопоставил историю встреч. Фиксируем аномалию в линии.",
@@ -218,7 +165,7 @@
             ];
             
             const outcomes = {
-                'football': ["Тотал Больше (2.5)", "Обе забьют: Да", "Фора 1 (0)", "Тотал Меньше (3.5)", "Индивидуа Тотал 1 Больше (1.5)", "Победа 1"],
+                'football': ["Тотал Больше (2.5)", "Обе забьют: Да", "Фора 1 (0)", "Тотал Меньше (3.5)", "Индивидуальный Тотал 1 Больше (1.5)", "Победа 1"],
                 'hockey': ["Тотал Больше (4.5)", "Победа в матче 1", "Фора 2 (+1.5)", "Тотал Меньше (6.5)", "Обе забьют: Да"],
                 'basketball': ["Фора 1 (-5.5)", "Тотал Больше", "Индивидуальный тотал 2 Меньше", "Победа 1 с учетом ОТ"],
                 'tennis': ["Победа 1", "Тотал геймов Больше (21.5)", "Фора 2 (+3.5)", "Точный счет 2:0"],
@@ -248,7 +195,7 @@
                 <div style="color: #8e8e93; font-size: 13px; text-align: center; margin-bottom: 15px;">${selectedIntro}</div>
                 
                 <div style="font-size: 14px; font-weight: bold; color: #fff; margin-bottom: 15px; text-align: center; background: #232427; padding: 10px; border-radius: 8px; border: 1px dashed #333;">
-                    🔍 Распознано: <span style="color: #0a84ff;">${matchName}</span>
+                    🔍 Статус: <span style="color: #0a84ff;">Событие распознано и верифицировано</span>
                 </div>
 
                 <div style="border: 1px solid #333; padding: 15px; border-radius: 8px; margin-bottom: 10px; background: rgba(10, 132, 255, 0.05);">

@@ -121,82 +121,86 @@
             progressBar.style.width = '0%';
             
             try {
-                // 1. Создаем canvas для обрезки
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                
-                // 2. Берем только верхние 15% изображения
-                const cropHeight = imageFile.height ? imageFile.height * 0.15 : preview.naturalHeight * 0.15;
-                const imgWidth = imageFile.width || preview.naturalWidth;
-                
-                canvas.width = imgWidth;
-                canvas.height = cropHeight;
-
-                // 3. Рисуем обрезанную часть (только шапку с названиями команд)
-                ctx.drawImage(preview, 0, 0, imgWidth, cropHeight, 0, 0, canvas.width, canvas.height);
-
-                // Преобразуем canvas в Blob, чтобы отдать Tesseract
-                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
-
-                // 4. Отдаем обрезанный кусок в Tesseract
-                const result = await Tesseract.recognize(blob, 'rus+eng', {
+                const result = await Tesseract.recognize(imageFile, 'rus+eng', {
                     logger: m => {
                         if (m.status === 'recognizing text') {
                             let pct = Math.floor(m.progress * 100);
                             progressBar.style.width = pct + '%';
                             
-                            if (pct < 30) statusText.innerText = "Сканирование заголовка...";
-                            else if (pct < 60) statusText.innerText = "Очистка от логотипов...";
-                            else if (pct < 90) statusText.innerText = "Поиск в базе...";
-                            else statusText.innerText = "Генерация отчета...";
+                            if (pct < 30) statusText.innerText = "Распознавание участников матча...";
+                            else if (pct < 60) statusText.innerText = "Поиск букмекерских паттернов...";
+                            else if (pct < 90) statusText.innerText = "Синхронизация с базой статистики...";
+                            else statusText.innerText = "Генерация аналитического отчета...";
                         }
                     }
                 });
 
-                const rawText = result.data.text;
+                const text = result.data.text;
+                const textNoSpaces = text.replace(/\s+/g, '');
                 loadingBox.style.display = 'none';
 
-                // 1. Разбиваем распознанный текст на отдельные строки
-                const lines = rawText.split('\n');
-                const validTeams = [];
+                // Защита от "Википедии" - ищем маркеры ставок по ВСЕМУ тексту
+                const hasBettingMarkers = /(тотал|фора|победа|ничья|коэф|исход|кэф|тб|тм|больше|меньше|матч|\d[\.,]\d{2})/i.test(text);
 
-                // 2. Слова из меню 1win, которые скрипт должен игнорировать
-                const navWords = ['все', 'основные', 'тоталы', 'форы', 'таймы', 'угловые', 'карточки', 'голы', 'счёт', 'хозяева', 'гости', 'комбо'];
-
-                for (let line of lines) {
-                    // Шаг А: Срезаем время (напр. 18:00) и дату (напр. 6 авг 2026 г...)
-                    // Это спасает команду КуПС от склеивания с датой
-                    let cleanLine = line.replace(/\d{1,2}:\d{2}/g, '')
-                                        .replace(/\d{1,2}\s+(авг|сен|окт|ноя|дек|янв|фев|мар|апр|май|июн|июл).*/gi, '');
+                if (textNoSpaces.length < 15 || !hasBettingMarkers) {
+                    errorBox.style.display = 'block';
+                    analyzeBtn.style.display = 'block';
+                    analyzeBtn.innerText = "🔄 Попробовать еще раз";
+                } else {
+                    // Анализируем текст ПОСТРОЧНО, чтобы не разрывать названия из двух слов
+                    const lines = result.data.lines;
+                    let foundLines = [];
                     
-                    // Шаг Б: Жесткая очистка. Оставляем только буквы, пробелы и дефисы
-                    cleanLine = cleanLine.replace(/[^a-zA-Zа-яА-ЯёЁ\s\-]/g, ' ').replace(/\s+/g, ' ').trim();
+                    const stopWords = ['тотал', 'фора', 'победа', 'ничья', 'матч', 'тайм', 'больше', 'меньше', 'коэффициент', 'исход', 'событие', 'линия', 'ординар', 'экспресс', 'команда', 'результат', 'основное', 'время', 'двойной', 'шанс', 'угловые', 'голы', 'счет', 'хозяева', 'гости', 'все', 'основные', 'таймы', 'меню', 'главная', 'казино', 'спорт'];
 
-                    // Шаг В: Пропускаем случайные огрызки текста (меньше 3 букв)
-                    // Но 'КуПС' (4 буквы) пройдет эту проверку
-                    if (cleanLine.length < 3) continue;
+                    for (let line of lines) {
+                        let cleanLine = line.text;
+                        
+                        // Вырезаем даты и время (чтобы не приклеились к названиям)
+                        cleanLine = cleanLine.replace(/\d{1,2}:\d{2}/g, ' ')
+                                             .replace(/\d{1,2}\s+(авг|сен|окт|ноя|дек|янв|фев|мар|апр|май|июн|июл)[a-zа-я\.]*\s*\d{0,4}\s*г?/gi, ' ');
+                        
+                        // Оставляем только буквы
+                        cleanLine = cleanLine.replace(/[^a-zA-Zа-яА-ЯёЁ\s\-]/g, ' ').replace(/\s+/g, ' ').trim();
+                        
+                        if (cleanLine.length < 3) continue;
 
-                    // Шаг Г: Проверяем, не является ли эта строка кнопками навигации
-                    let lowerLine = cleanLine.toLowerCase();
-                    let isNav = navWords.some(w => lowerLine.includes(w));
-                    if (isNav) continue;
+                        // Фильтруем строку от стоп-слов
+                        let wordsInLine = cleanLine.split(/\s+/);
+                        let finalWords = [];
 
-                    // Добавляем очищенную строку как название команды
-                    validTeams.push(cleanLine);
+                        for (let w of wordsInLine) {
+                            if (w.length > 2 && !stopWords.includes(w.toLowerCase())) {
+                                finalWords.push(w);
+                            }
+                        }
+
+                        // Если в строке остались нормальные слова (это название команды) - сохраняем
+                        if (finalWords.length > 0) {
+                            foundLines.push(finalWords.join(' '));
+                        }
+                        
+                        // Нам нужны только первые две подходящие строчки (там всегда команды)
+                        if (foundLines.length === 2) break;
+                    }
+
+                    let matchName = "Анализ скрытого события";
+                    
+                    if (foundLines.length === 2) {
+                        // Идеально для телефона: Строка 1 — Команда А, Строка 2 — Команда Б (любой длины)
+                        matchName = `${foundLines[0]} — ${foundLines[1]}`;
+                    } else if (foundLines.length === 1) {
+                        // Идеально для ПК: Команды на одной строке (например "Мальорка ПСЖ")
+                        let words = foundLines[0].split(' ');
+                        if (words.length >= 2) {
+                            matchName = `${words[0]} — ${words[words.length - 1]}`;
+                        } else {
+                            matchName = `Матч: ${foundLines[0]}`;
+                        }
+                    }
+
+                    generatePrediction(sportSelect.value, matchName);
                 }
-
-                // Шаг 3: Собираем заголовок из первых двух найденных строк
-                let matchName = "Анализ скрытого события"; 
-                if (validTeams.length >= 2) {
-                    matchName = `${validTeams[0]} — ${validTeams[1]}`;
-                } else if (validTeams.length === 1) {
-                    matchName = `Матч с участием: ${validTeams[0]}`;
-                }
-
-                // Даже если ничего не найдено, мы все равно выдаем результат, 
-                // чтобы не блокировать воронку ошибками
-                generatePrediction(sportSelect.value, matchName);
-                
             } catch (err) {
                 console.error(err);
                 loadingBox.style.display = 'none';

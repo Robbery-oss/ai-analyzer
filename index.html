@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Analytics PRO</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
     <style>
         body {
             background-color: var(--tg-theme-bg-color, #131415);
@@ -16,11 +15,10 @@
             margin: 0;
         }
         .container { max-width: 400px; margin: 0 auto; }
-        select, .upload-btn, .submit-btn {
+        .upload-btn, .submit-btn {
             width: 100%; padding: 16px; margin: 10px 0;
             border-radius: 12px; border: none; font-size: 16px; box-sizing: border-box;
         }
-        select { background-color: #232427; color: white; outline: none; border: 1px solid #333; }
         .upload-btn { background-color: #232427; color: #0a84ff; cursor: pointer; display: inline-block; border: 1px solid #333;}
         .submit-btn { background-color: #0a84ff; color: white; font-weight: bold; cursor: pointer; display: none; }
         input[type="file"] { display: none; }
@@ -40,35 +38,22 @@
         <h2 style="margin-bottom: 5px;">Нейросеть V2.5</h2>
         <p style="color: #8e8e93; font-size: 14px; margin-top: 0;">Интеллектуальный анализ матчей</p>
         
-        <select id="sport-select">
-            <option value="" disabled selected>🏆 Выберите спорт</option>
-            <option value="football">⚽ Футбол</option>
-            <option value="hockey">🏒 Хоккей</option>
-            <option value="basketball">🏀 Баскетбол</option>
-            <option value="tennis">🎾 Теннис</option>
-            <option value="esports">🎮 Киберспорт</option>
-        </select>
-
-        <label class="upload-btn">
+        <label class="upload-btn" id="upload-label">
             📸 Загрузить скриншот линии
             <input type="file" id="image-upload" accept="image/*">
         </label>
         
         <img id="preview" src="" alt="Скриншот">
-        <button class="submit-btn" id="analyze-btn">🚀 Запустить сканирование</button>
+        <button class="submit-btn" id="analyze-btn">🚀 Запустить ИИ-сканирование</button>
         
         <div id="loading-box">
-            <div id="status-text">Инициализация модулей...</div>
+            <div id="status-text">Нейросеть изучает скриншот...</div>
             <div class="progress-container">
                 <div class="progress-bar" id="progress-bar"></div>
             </div>
         </div>
         
-        <div class="error-box" id="error-box">
-            <b>⚠️ Ошибка сканирования</b><br><br>
-            На скриншоте не найдено букмекерских данных. Пожалуйста, загрузите четкое изображение линии БК, где хорошо видно коэффициенты и исходы.
-        </div>
-
+        <div class="error-box" id="error-box"></div>
         <div class="result-box" id="result"></div>
     </div>
 
@@ -76,157 +61,148 @@
         let tg = window.Telegram.WebApp;
         tg.expand();
 
-        const sportSelect = document.getElementById('sport-select');
         const imageUpload = document.getElementById('image-upload');
         const preview = document.getElementById('preview');
         const analyzeBtn = document.getElementById('analyze-btn');
-        
         const loadingBox = document.getElementById('loading-box');
         const progressBar = document.getElementById('progress-bar');
         const statusText = document.getElementById('status-text');
         const errorBox = document.getElementById('error-box');
         const resultBox = document.getElementById('result');
+        const uploadLabel = document.getElementById('upload-label');
 
-        let imageFile = null;
+        let base64Image = null;
+
+        // ВАЖНО: ВСТАВЬ СЮДА СВОЙ НАСТОЯЩИЙ КЛЮЧ OPENAI (sk-proj-...)
+        const OPENAI_API_KEY = "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"; 
 
         imageUpload.addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (file) {
-                imageFile = file;
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     preview.src = e.target.result;
+                    base64Image = e.target.result.split(',')[1]; // Получаем чистый base64
                     preview.style.display = 'block';
                     errorBox.style.display = 'none';
                     resultBox.style.display = 'none';
-                    checkInputs();
+                    analyzeBtn.style.display = 'block';
                 }
                 reader.readAsDataURL(file);
             }
         });
 
-        sportSelect.addEventListener('change', checkInputs);
-
-        function checkInputs() {
-            if (sportSelect.value && imageUpload.files.length > 0) {
-                analyzeBtn.style.display = 'block';
-            }
-        }
-
         analyzeBtn.addEventListener('click', async function() {
+            if (!base64Image) return;
+            
+            uploadLabel.style.display = 'none';
             analyzeBtn.style.display = 'none';
             loadingBox.style.display = 'block';
             errorBox.style.display = 'none';
             resultBox.style.display = 'none';
-            progressBar.style.width = '0%';
             
+            let progress = 0;
+            let progressInterval = setInterval(() => {
+                progress += 5;
+                if (progress > 90) progress = 90;
+                progressBar.style.width = progress + '%';
+            }, 300);
+
+            const promptText = `
+            Ты профессиональный спортивный аналитик. Твоя задача — проанализировать реальный скриншот букмекерской конторы.
+            1. Убедись, что на скриншоте есть линия ставок.
+            2. Определи названия играющих команд.
+            3. Выбери ровно ОДИН исход со скриншота, коэффициент которого от 1.50 до 2.00 (или ближайший).
+            4. Напиши краткое (1-2 предложения) аналитическое обоснование.
+            Верни ответ СТРОГО в формате JSON:
+            {"team1": "Команда 1", "team2": "Команда 2", "best_pick": "Исход", "odd": 1.85, "probability_pct": 82, "analysis_logic": "Обоснование..."}`;
+
             try {
-                const result = await Tesseract.recognize(imageFile, 'rus+eng', {
-                    logger: m => {
-                        if (m.status === 'recognizing text') {
-                            let pct = Math.floor(m.progress * 100);
-                            progressBar.style.width = pct + '%';
-                            
-                            if (pct < 30) statusText.innerText = "Сканирование структуры линии...";
-                            else if (pct < 60) statusText.innerText = "Проверка букмекерских маркеров...";
-                            else if (pct < 90) statusText.innerText = "Поиск оптимальных паттернов...";
-                            else statusText.innerText = "Генерация отчета...";
-                        }
-                    }
+                const response = await fetch("https://api.openai.com/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${OPENAI_API_KEY}`
+                    },
+                    body: JSON.stringify({
+                        model: "gpt-4o-mini",
+                        messages: [
+                            {
+                                role: "user",
+                                content: [
+                                    { type: "text", text: promptText },
+                                    { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64Image}` } }
+                                ]
+                            }
+                        ],
+                        response_format: { type: "json_object" },
+                        max_tokens: 350
+                    })
                 });
 
-                const text = result.data.text;
-                const textNoSpaces = text.replace(/\s+/g, '');
+                clearInterval(progressInterval);
+                progressBar.style.width = '100%';
                 loadingBox.style.display = 'none';
 
-                // Защита от левых картинок - ищем маркеры ставок
-                const hasBettingMarkers = /(тотал|фора|победа|ничья|коэф|исход|кэф|тб|тм|больше|меньше|матч|\d[\.,]\d{2})/i.test(text);
+                if (!response.ok) {
+                    throw new Error("Ошибка связи с OpenAI. Включи VPN на телефоне/ПК, если API заблокирован.");
+                }
 
-                if (textNoSpaces.length < 15 || !hasBettingMarkers) {
-                    errorBox.style.display = 'block';
-                    analyzeBtn.style.display = 'block';
-                    analyzeBtn.innerText = "🔄 Попробовать еще раз";
+                const jsonResponse = await response.json();
+                const aiData = JSON.parse(jsonResponse.choices[0].message.content);
+
+                if (aiData.error) {
+                    showError(aiData.error);
                 } else {
-                    // Если скриншот прошел проверку, сразу выдаем результат
-                    generatePrediction(sportSelect.value);
+                    renderResult(aiData);
                 }
             } catch (err) {
-                console.error(err);
+                clearInterval(progressInterval);
                 loadingBox.style.display = 'none';
-                generatePrediction(sportSelect.value);
+                showError(err.message);
             }
         });
 
-        function generatePrediction(sport) {
-            const intros = [
-                "Данные успешно верифицированы. Найден оптимальный паттерн.",
-                "Алгоритм сопоставил историю встреч. Фиксируем аномалию в линии.",
-                "Глубокий анализ завершен. Выявлен исход с максимальным ROI."
-            ];
-            
-            const outcomes = {
-                'football': ["Тотал Больше (2.5)", "Обе забьют: Да", "Фора 1 (0)", "Тотал Меньше (3.5)", "Индивидуальный Тотал 1 Больше (1.5)", "Победа 1"],
-                'hockey': ["Тотал Больше (4.5)", "Победа в матче 1", "Фора 2 (+1.5)", "Тотал Меньше (6.5)", "Обе забьют: Да"],
-                'basketball': ["Фора 1 (-5.5)", "Тотал Больше", "Индивидуальный тотал 2 Меньше", "Победа 1 с учетом ОТ"],
-                'tennis': ["Победа 1", "Тотал геймов Больше (21.5)", "Фора 2 (+3.5)", "Точный счет 2:0"],
-                'esports': ["Победа 1 на первой карте", "Тотал карт Больше (2.5)", "Фора 2 (+1.5)"]
-            };
+        function showError(msg) {
+            errorBox.innerHTML = `<b>⚠️ Ошибка:</b><br>${msg}`;
+            errorBox.style.display = 'block';
+            uploadLabel.style.display = 'inline-block';
+            analyzeBtn.style.display = 'block';
+            analyzeBtn.innerText = "🔄 Попробовать еще раз";
+            progressBar.style.width = '0%';
+        }
 
-            const deepExplanations = [
-                "Аналитический модуль сопоставил показатели ожидаемых голов (xG/xPts), индекс усталости ключевых игроков и историю очных встреч. Выявлена критическая уязвимость в линии защиты, что в 82% подобных сценариев приводит к уверенному проходу данного исхода.",
-                "Нейросеть зафиксировала сильный дисбаланс в распределении денежных потоков (прогруз). Вкупе с математической моделью текущей формы команд, алгоритм определяет этот исход как максимально валуйный с минимальной маржой риска для игрока.",
-                "Алгоритм проанализировал микротравмы основного состава и тактический рисунок тренеров в последних матчах. Исторические статистические паттерны показывают, что при подобной расстановке сил данный исход пробивается с вероятностью, сильно превышающей расчеты букмекера."
-            ];
-
-            const selectedIntro = intros[Math.floor(Math.random() * intros.length)];
-            const availableOutcomes = outcomes[sport] || outcomes['football'];
-            
-            const shuffled = availableOutcomes.sort(() => 0.5 - Math.random());
-            const outcome1 = shuffled[0];
-            const outcome2 = shuffled[1];
-            
-            const prob1 = Math.floor(Math.random() * (94 - 82 + 1)) + 82; 
-            const prob2 = Math.floor(Math.random() * (75 - 60 + 1)) + 60; 
-
-            const mainExp = deepExplanations[Math.floor(Math.random() * deepExplanations.length)];
-
+        function renderResult(data) {
             const resultHTML = `
-                <h3 class="result-title" style="color: #32d74b; margin-top: 0; font-size: 18px; text-align: center;">✅ Анализ завершен</h3>
-                <div style="color: #8e8e93; font-size: 13px; text-align: center; margin-bottom: 15px;">${selectedIntro}</div>
+                <h3 style="color: #32d74b; margin-top: 0; font-size: 18px; text-align: center;">✅ Анализ завершен</h3>
                 
                 <div style="font-size: 14px; font-weight: bold; color: #fff; margin-bottom: 15px; text-align: center; background: #232427; padding: 10px; border-radius: 8px; border: 1px dashed #333;">
-                    🔍 Статус: <span style="color: #0a84ff;">Событие распознано и верифицировано</span>
+                    ⚽ ${data.team1} - ${data.team2}
                 </div>
 
                 <div style="border: 1px solid #333; padding: 15px; border-radius: 8px; margin-bottom: 10px; background: rgba(10, 132, 255, 0.05);">
                     <div style="font-size: 12px; color: #0a84ff; text-transform: uppercase; font-weight: bold; margin-bottom: 8px;">🎯 Основной прогноз</div>
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <span style="font-size: 16px; font-weight: bold; color: #fff;">${outcome1}</span>
-                        <span style="color: #32d74b; font-weight: bold; font-size: 18px;">${prob1}%</span>
+                        <span style="font-size: 16px; font-weight: bold; color: #fff;">${data.best_pick}</span>
+                        <span style="color: #32d74b; font-weight: bold; font-size: 18px;">${data.probability_pct}%</span>
+                    </div>
+                    <div style="font-size: 12px; color: #a1a1aa; margin-bottom: 10px;">
+                        Коэффициент: <b style="color: #fff;">${data.odd}</b>
                     </div>
                     <div style="font-size: 12px; color: #a1a1aa; line-height: 1.5; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
-                        🧠 <b>Логика ИИ:</b> ${mainExp}
-                    </div>
-                </div>
-
-                <div style="border: 1px solid #333; padding: 12px; border-radius: 8px; margin-bottom: 15px; background: rgba(255, 69, 58, 0.05);">
-                    <div style="font-size: 12px; color: #ff453a; text-transform: uppercase; font-weight: bold; margin-bottom: 8px;">🔥 Альтернативный риск-исход</div>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-size: 15px; font-weight: bold; color: #fff;">${outcome2}</span>
-                        <span style="color: #ffd60a; font-weight: bold; font-size: 16px;">${prob2}%</span>
+                        🧠 <b>Логика ИИ:</b> ${data.analysis_logic}
                     </div>
                 </div>
 
                 <div style="margin-top: 10px; font-size: 13px; color: #ffd60a; font-weight: bold; text-align: center; background: rgba(255, 214, 10, 0.1); padding: 12px; border-radius: 8px; border: 1px dashed #ffd60a;">
-                    🎁 При регистрации используйте промокод: <span style="font-size: 18px; color: #fff; margin-left: 5px;">SOTNI</span>
+                    🎁 Используйте промокод: <span style="font-size: 18px; color: #fff; margin-left: 5px;">SOTNI</span>
                 </div>
             `;
-
-            const resultBox = document.getElementById('result');
+            
             resultBox.innerHTML = resultHTML;
             resultBox.style.display = 'block';
 
-            tg.MainButton.text = "СДЕЛАТЬ СТАВКУ (ПРОМО: SOTNI)";
+            tg.MainButton.text = "СДЕЛАТЬ СТАВКУ";
             tg.MainButton.show();
             tg.MainButton.onClick(() => {
                 tg.openLink("https://lkhv.pro/66ca12");

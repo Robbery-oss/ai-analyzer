@@ -9,7 +9,7 @@
         body { background-color: var(--tg-theme-bg-color, #131415); color: var(--tg-theme-text-color, #ffffff); font-family: -apple-system, sans-serif; padding: 20px; text-align: center; margin: 0; }
         .container { max-width: 400px; margin: 0 auto; }
         .upload-btn, .submit-btn { width: 100%; padding: 16px; margin: 10px 0; border-radius: 12px; border: none; font-size: 16px; box-sizing: border-box; }
-        .upload-btn { background-color: #232427; color: #0a84ff; cursor: pointer; display: inline-block; border: 1px solid #333;}
+        .upload-btn { background-color: #232427; color: #0a84ff; cursor: pointer; display: block; border: 1px solid #333;}
         .submit-btn { background-color: #0a84ff; color: white; font-weight: bold; cursor: pointer; display: none; }
         input[type="file"] { display: none; }
         #preview { max-width: 100%; border-radius: 12px; margin-top: 15px; display: none; border: 1px solid #333; }
@@ -19,6 +19,8 @@
         .result-box { background-color: #1c1c1e; padding: 20px; border-radius: 12px; margin-top: 20px; display: none; border: 1px solid #32d74b; text-align: left; }
         .error-box { background-color: #2d1a1c; padding: 15px; border-radius: 12px; margin-top: 20px; display: none; border: 1px solid #ff453a; color: #ff453a; text-align: left; font-size: 14px; }
         .hint { color: #8e8e93; font-size: 12px; margin-top: 8px; }
+        #quota-line { color: #8e8e93; font-size: 13px; margin: 4px 0 12px; min-height: 18px; }
+        #upload-after-wrap { display: none; margin-top: 12px; }
     </style>
 </head>
 <body>
@@ -26,10 +28,11 @@
         <h2 style="margin-bottom: 5px;">Нейросеть V2.5</h2>
         <p style="color: #8e8e93; font-size: 14px; margin-top: 0;">Интеллектуальный анализ матчей</p>
         
-        <label class="upload-btn" id="upload-label">
+        <label class="upload-btn" id="upload-label-top">
             📸 Загрузить скриншот линии
             <input type="file" id="image-upload" accept="image/*">
         </label>
+        <div id="quota-line">Загрузка лимита…</div>
         
         <img id="preview" src="" alt="Скриншот">
         <button class="submit-btn" id="analyze-btn">🚀 Получить прогноз</button>
@@ -42,6 +45,13 @@
         
         <div class="error-box" id="error-box"></div>
         <div class="result-box" id="result"></div>
+
+        <div id="upload-after-wrap">
+            <label class="upload-btn" id="upload-label-bottom">
+                📸 Загрузить скриншот линии
+                <input type="file" id="image-upload-bottom" accept="image/*">
+            </label>
+        </div>
     </div>
 
     <script>
@@ -49,12 +59,15 @@
         tg.expand();
 
         const urlParams = new URLSearchParams(window.location.search);
-        // После деплоя на Render укажи URL здесь или передай ?api=https://твой-сервис.onrender.com
         const DEFAULT_API_BASE = "https://ai-bot-backend-lmvc.onrender.com";
         const apiBase = (urlParams.get("api") || DEFAULT_API_BASE).replace(/\/$/, "");
         const ANALYZE_URL = apiBase + "/analyze";
+        const QUOTA_URL = apiBase + "/quota";
         const REF_LINK = urlParams.get("ref") || "https://lkhv.pro/66ca12";
         const REQUEST_TIMEOUT_MS = 120000;
+
+        const tgUser = tg.initDataUnsafe && tg.initDataUnsafe.user;
+        const userId = tgUser && tgUser.id ? String(tgUser.id) : null;
 
         function escapeHtml(text) {
             const div = document.createElement("div");
@@ -62,29 +75,17 @@
             return div.innerHTML;
         }
 
-        const imageUpload = document.getElementById("image-upload");
-        const preview = document.getElementById("preview");
-        const analyzeBtn = document.getElementById("analyze-btn");
-        const loadingBox = document.getElementById("loading-box");
-        const loadingText = document.getElementById("loading-text");
-        const progressBar = document.getElementById("progress-bar");
-        const errorBox = document.getElementById("error-box");
-        const resultBox = document.getElementById("result");
-        const uploadLabel = document.getElementById("upload-label");
+        function formatQuotaText(quota) {
+            if (!quota) return "Лимит: откройте через бота в Telegram";
+            if (quota.unlimited) return "Доступно анализов: ♾️ безлимит";
+            const left = Math.max(0, (quota.limit || 0) - (quota.used || 0));
+            return `Доступно анализов: <b>${left}</b> из ${quota.limit}`;
+        }
 
-        imageUpload.addEventListener("change", function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function(ev) {
-                preview.src = ev.target.result;
-                preview.style.display = "block";
-                errorBox.style.display = "none";
-                resultBox.style.display = "none";
-                analyzeBtn.style.display = "block";
-            };
-            reader.readAsDataURL(file);
-        });
+        function renderQuota(quota) {
+            const el = document.getElementById("quota-line");
+            el.innerHTML = formatQuotaText(quota);
+        }
 
         async function fetchWithTimeout(url, options, timeoutMs) {
             const controller = new AbortController();
@@ -96,10 +97,80 @@
             }
         }
 
+        async function refreshQuota() {
+            if (!userId) {
+                renderQuota(null);
+                return;
+            }
+            try {
+                const response = await fetchWithTimeout(
+                    QUOTA_URL + "?user_id=" + encodeURIComponent(userId),
+                    { method: "GET" },
+                    30000
+                );
+                const raw = await response.text();
+                let data = {};
+                try { data = raw ? JSON.parse(raw) : {}; } catch (_) { return; }
+                if (response.ok && data.quota) renderQuota(data.quota);
+            } catch (_) {
+                document.getElementById("quota-line").textContent = "Лимит: обновится после анализа";
+            }
+        }
+
+        refreshQuota();
+
+        const imageUpload = document.getElementById("image-upload");
+        const imageUploadBottom = document.getElementById("image-upload-bottom");
+        const preview = document.getElementById("preview");
+        const analyzeBtn = document.getElementById("analyze-btn");
+        const loadingBox = document.getElementById("loading-box");
+        const loadingText = document.getElementById("loading-text");
+        const progressBar = document.getElementById("progress-bar");
+        const errorBox = document.getElementById("error-box");
+        const resultBox = document.getElementById("result");
+        const uploadLabelTop = document.getElementById("upload-label-top");
+        const uploadAfterWrap = document.getElementById("upload-after-wrap");
+
+        function onFileSelected(file) {
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(ev) {
+                preview.src = ev.target.result;
+                preview.style.display = "block";
+                errorBox.style.display = "none";
+                resultBox.style.display = "none";
+                uploadAfterWrap.style.display = "none";
+                analyzeBtn.style.display = "block";
+                uploadLabelTop.style.display = "block";
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function bindFileInput(input) {
+            input.addEventListener("change", function(e) {
+                const file = e.target.files[0];
+                onFileSelected(file);
+                if (input !== imageUpload && file) {
+                    const dt = new DataTransfer();
+                    dt.items.add(file);
+                    imageUpload.files = dt.files;
+                }
+                if (input !== imageUploadBottom && file) {
+                    const dt2 = new DataTransfer();
+                    dt2.items.add(file);
+                    imageUploadBottom.files = dt2.files;
+                }
+            });
+        }
+
+        bindFileInput(imageUpload);
+        bindFileInput(imageUploadBottom);
+
         analyzeBtn.addEventListener("click", async function() {
             if (!imageUpload.files[0]) return;
 
-            uploadLabel.style.display = "none";
+            uploadLabelTop.style.display = "none";
+            uploadAfterWrap.style.display = "none";
             analyzeBtn.style.display = "none";
             loadingBox.style.display = "block";
             errorBox.style.display = "none";
@@ -115,6 +186,7 @@
 
             const formData = new FormData();
             formData.append("image", imageUpload.files[0]);
+            if (userId) formData.append("user_id", userId);
 
             try {
                 const response = await fetchWithTimeout(
@@ -133,6 +205,8 @@
                 } catch (_) {
                     throw new Error("Сервер вернул не JSON. Проверь, что API задеплоен (GET " + apiBase + " → status ok).");
                 }
+
+                if (data.quota) renderQuota(data.quota);
 
                 if (!response.ok) {
                     throw new Error(data.error || ("Ошибка сервера HTTP " + response.status));
@@ -153,6 +227,8 @@
                     </div>
                 `;
                 resultBox.style.display = "block";
+                preview.style.display = "block";
+                uploadAfterWrap.style.display = "block";
 
                 tg.MainButton.setText("СДЕЛАТЬ СТАВКУ");
                 tg.MainButton.show();
@@ -171,7 +247,7 @@
 
                 errorBox.innerHTML = "<b>⚠️ Ошибка</b><br>" + escapeHtml(msg);
                 errorBox.style.display = "block";
-                uploadLabel.style.display = "inline-block";
+                uploadLabelTop.style.display = "block";
                 analyzeBtn.style.display = "block";
                 analyzeBtn.innerText = "🔄 Попробовать ещё раз";
             }

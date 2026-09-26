@@ -50,7 +50,7 @@
 
         const urlParams = new URLSearchParams(window.location.search);
         // После деплоя на Render укажи URL здесь или передай ?api=https://твой-сервис.onrender.com
-        const DEFAULT_API_BASE = "https://ai-bot-backend-1mvc.onrender.com";
+        const DEFAULT_API_BASE = "https://ai-bot-backend-lmvc.onrender.com";
         const apiBase = (urlParams.get("api") || DEFAULT_API_BASE).replace(/\/$/, "");
         const ANALYZE_URL = apiBase + "/analyze";
         const REF_LINK = urlParams.get("ref") || "https://lkhv.pro/66ca12";

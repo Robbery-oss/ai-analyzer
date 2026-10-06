@@ -6,7 +6,15 @@
     <title>AI Analytics PRO</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { background-color: var(--tg-theme-bg-color, #131415); color: var(--tg-theme-text-color, #ffffff); font-family: -apple-system, sans-serif; padding: 20px; text-align: center; margin: 0; }
+        body { background-color: var(--tg-theme-bg-color, #131415); color: var(--tg-theme-text-color, #ffffff); font-family: -apple-system, sans-serif; padding: 20px; padding-top: 48px; text-align: center; margin: 0; }
+        #level-badge {
+            position: fixed; top: 12px; right: 12px; z-index: 100;
+            background: linear-gradient(135deg, #2a2a2e 0%, #1c1c1e 100%);
+            border: 1px solid #3a3a3c; border-radius: 20px;
+            padding: 6px 12px; font-size: 13px; font-weight: 600;
+            color: #ffd60a; box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+        }
+        #level-badge.muted { color: #8e8e93; font-weight: 500; }
         .container { max-width: 400px; margin: 0 auto; }
         .upload-btn, .submit-btn { width: 100%; padding: 16px; margin: 10px 0; border-radius: 12px; border: none; font-size: 16px; box-sizing: border-box; }
         .upload-btn { background-color: #232427; color: #0a84ff; cursor: pointer; display: block; border: 1px solid #333;}
@@ -24,6 +32,7 @@
     </style>
 </head>
 <body>
+    <div id="level-badge" class="muted">Уровень …</div>
     <div class="container">
         <h2 style="margin-bottom: 5px;">Нейросеть V2.5</h2>
         <p style="color: #8e8e93; font-size: 14px; margin-top: 0;">Интеллектуальный анализ матчей</p>
@@ -63,6 +72,7 @@
         const apiBase = (urlParams.get("api") || DEFAULT_API_BASE).replace(/\/$/, "");
         const ANALYZE_URL = apiBase + "/analyze";
         const QUOTA_URL = apiBase + "/quota";
+        const LEVEL_URL = apiBase + "/level";
         const REF_LINK = urlParams.get("ref") || "https://lkhv.pro/66ca12";
         const REQUEST_TIMEOUT_MS = 120000;
 
@@ -85,6 +95,38 @@
         function renderQuota(quota) {
             const el = document.getElementById("quota-line");
             el.innerHTML = formatQuotaText(quota);
+        }
+
+        function renderLevel(levelInfo) {
+            const el = document.getElementById("level-badge");
+            if (!levelInfo || levelInfo.level == null) {
+                el.textContent = "Уровень —";
+                el.classList.add("muted");
+                return;
+            }
+            el.classList.remove("muted");
+            el.innerHTML = "⭐ Ур. <b>" + escapeHtml(levelInfo.level) + "</b>";
+            el.title = "Сумма депозитов: " + (levelInfo.total_deposited != null ? levelInfo.total_deposited : 0) + " ₽";
+        }
+
+        async function refreshLevel() {
+            if (!userId) {
+                renderLevel(null);
+                return;
+            }
+            try {
+                const response = await fetchWithTimeout(
+                    LEVEL_URL + "?user_id=" + encodeURIComponent(userId),
+                    { method: "GET" },
+                    30000
+                );
+                const raw = await response.text();
+                let data = {};
+                try { data = raw ? JSON.parse(raw) : {}; } catch (_) { return; }
+                if (response.ok && data.level) renderLevel(data.level);
+            } catch (_) {
+                document.getElementById("level-badge").textContent = "Уровень ?";
+            }
         }
 
         async function fetchWithTimeout(url, options, timeoutMs) {
@@ -118,6 +160,7 @@
         }
 
         refreshQuota();
+        refreshLevel();
 
         const imageUpload = document.getElementById("image-upload");
         const imageUploadBottom = document.getElementById("image-upload-bottom");
@@ -207,6 +250,7 @@
                 }
 
                 if (data.quota) renderQuota(data.quota);
+                refreshLevel();
 
                 if (!response.ok) {
                     throw new Error(data.error || ("Ошибка сервера HTTP " + response.status));

@@ -6,15 +6,29 @@
     <title>AI Analytics PRO</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { background-color: var(--tg-theme-bg-color, #131415); color: var(--tg-theme-text-color, #ffffff); font-family: -apple-system, sans-serif; padding: 20px; padding-top: 48px; text-align: center; margin: 0; }
-        #level-badge {
-            position: fixed; top: 12px; right: 12px; z-index: 100;
-            background: linear-gradient(135deg, #2a2a2e 0%, #1c1c1e 100%);
-            border: 1px solid #3a3a3c; border-radius: 20px;
-            padding: 6px 12px; font-size: 13px; font-weight: 600;
-            color: #ffd60a; box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+        body { background-color: var(--tg-theme-bg-color, #131415); color: var(--tg-theme-text-color, #ffffff); font-family: -apple-system, sans-serif; padding: 20px; padding-top: 52px; text-align: center; margin: 0; }
+        #level-hud {
+            position: fixed; top: 10px; right: 10px; left: 10px; z-index: 100;
+            display: flex; align-items: center; justify-content: flex-end; gap: 6px;
+            max-width: 420px; margin-left: auto;
+            background: rgba(28, 28, 30, 0.92); border: 1px solid #3a3a3c; border-radius: 14px;
+            padding: 5px 10px; font-size: 11px; line-height: 1;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+            backdrop-filter: blur(8px);
         }
-        #level-badge.muted { color: #8e8e93; font-weight: 500; }
+        #level-hud.muted { opacity: 0.75; }
+        #level-hud .level-name { font-weight: 700; color: #ffd60a; white-space: nowrap; flex-shrink: 0; }
+        #level-hud .tier-bound { color: #8e8e93; font-size: 10px; font-variant-numeric: tabular-nums; flex-shrink: 0; min-width: 2.5em; text-align: center; }
+        #level-hud .level-track {
+            flex: 1; min-width: 48px; max-width: 120px; height: 6px;
+            background: #2c2c2e; border-radius: 3px; overflow: hidden;
+        }
+        #level-hud .level-fill {
+            height: 100%; width: 0%; background: #32d74b; border-radius: 3px;
+            transition: width 0.45s ease;
+            box-shadow: 0 0 6px rgba(50, 215, 75, 0.45);
+        }
+        #level-hud.max-tier .level-fill { width: 100% !important; }
         .container { max-width: 400px; margin: 0 auto; }
         .upload-btn, .submit-btn { width: 100%; padding: 16px; margin: 10px 0; border-radius: 12px; border: none; font-size: 16px; box-sizing: border-box; }
         .upload-btn { background-color: #232427; color: #0a84ff; cursor: pointer; display: block; border: 1px solid #333;}
@@ -32,7 +46,12 @@
     </style>
 </head>
 <body>
-    <div id="level-badge" class="muted">Уровень …</div>
+    <div id="level-hud" class="muted" aria-label="Прогресс уровня">
+        <span class="level-name">Ур. …</span>
+        <span class="tier-bound tier-min">0</span>
+        <div class="level-track"><div class="level-fill"></div></div>
+        <span class="tier-bound tier-max">—</span>
+    </div>
     <div class="container">
         <h2 style="margin-bottom: 5px;">Нейросеть V2.5</h2>
         <p style="color: #8e8e93; font-size: 14px; margin-top: 0;">Интеллектуальный анализ матчей</p>
@@ -97,16 +116,49 @@
             el.innerHTML = formatQuotaText(quota);
         }
 
+        function formatTierAmount(n) {
+            const v = Math.round(Number(n) || 0);
+            return v.toLocaleString("ru-RU");
+        }
+
+        function tierProgress(levelInfo) {
+            const total = Number(levelInfo.total_deposited) || 0;
+            const level = Number(levelInfo.level) || 1;
+            const t2 = Number(levelInfo.tier2_min) || 5000;
+            const t3 = Number(levelInfo.tier3_min) || 20000;
+            if (level >= 3) {
+                return { start: t3, end: t3, pct: 100, max: true };
+            }
+            const start = level >= 2 ? t2 : 0;
+            const end = level >= 2 ? t3 : t2;
+            const span = end - start;
+            const inSeg = Math.max(0, Math.min(span, total - start));
+            const pct = span > 0 ? (inSeg / span) * 100 : 0;
+            return { start, end, pct, max: false };
+        }
+
         function renderLevel(levelInfo) {
-            const el = document.getElementById("level-badge");
+            const hud = document.getElementById("level-hud");
             if (!levelInfo || levelInfo.level == null) {
-                el.textContent = "Уровень —";
-                el.classList.add("muted");
+                hud.classList.add("muted");
+                hud.classList.remove("max-tier");
+                hud.querySelector(".level-name").textContent = "Ур. —";
+                hud.querySelector(".tier-min").textContent = "0";
+                hud.querySelector(".tier-max").textContent = "—";
+                hud.querySelector(".level-fill").style.width = "0%";
+                hud.title = "";
                 return;
             }
-            el.classList.remove("muted");
-            el.innerHTML = "⭐ Ур. <b>" + escapeHtml(levelInfo.level) + "</b>";
-            el.title = "Сумма депозитов: " + (levelInfo.total_deposited != null ? levelInfo.total_deposited : 0) + " ₽";
+            hud.classList.remove("muted");
+            const prog = tierProgress(levelInfo);
+            const lvl = Number(levelInfo.level) || 1;
+            hud.querySelector(".level-name").textContent = "⭐ Ур." + lvl;
+            hud.querySelector(".tier-min").textContent = formatTierAmount(prog.start);
+            hud.querySelector(".tier-max").textContent = prog.max ? "MAX" : formatTierAmount(prog.end);
+            hud.querySelector(".level-fill").style.width = prog.pct + "%";
+            hud.classList.toggle("max-tier", prog.max);
+            const total = Number(levelInfo.total_deposited) || 0;
+            hud.title = "Депозиты: " + total + " ₽";
         }
 
         async function refreshLevel() {
@@ -125,7 +177,8 @@
                 try { data = raw ? JSON.parse(raw) : {}; } catch (_) { return; }
                 if (response.ok && data.level) renderLevel(data.level);
             } catch (_) {
-                document.getElementById("level-badge").textContent = "Уровень ?";
+                document.getElementById("level-hud").classList.add("muted");
+                document.querySelector("#level-hud .level-name").textContent = "Ур. ?";
             }
         }
 

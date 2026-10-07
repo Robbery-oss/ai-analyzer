@@ -43,6 +43,40 @@
         .hint { color: #8e8e93; font-size: 12px; margin-top: 8px; }
         #quota-line { color: #8e8e93; font-size: 13px; margin: 4px 0 12px; min-height: 18px; }
         #upload-after-wrap { display: none; margin-top: 12px; }
+        .wheel-open-btn {
+            width: 100%; padding: 14px; margin: 8px 0 4px; border-radius: 12px; border: 1px solid #3a3a3c;
+            background: linear-gradient(180deg, #2a2a2e 0%, #1c1c1e 100%); color: #ffd60a; font-size: 16px;
+            font-weight: 600; cursor: pointer; box-sizing: border-box;
+        }
+        .wheel-open-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        #wheel-hint { color: #8e8e93; font-size: 12px; margin: 0 0 12px; min-height: 16px; }
+        #wheel-screen {
+            display: none; position: fixed; inset: 0; z-index: 200; background: var(--tg-theme-bg-color, #0d0d0f);
+            flex-direction: column; align-items: center; padding: 16px; box-sizing: border-box; overflow-y: auto;
+        }
+        #wheel-screen.open { display: flex; }
+        .wheel-topbar { width: 100%; max-width: 400px; display: flex; align-items: center; margin-bottom: 8px; }
+        .wheel-back {
+            background: none; border: none; color: #0a84ff; font-size: 16px; cursor: pointer; padding: 8px 0;
+        }
+        .wheel-title { flex: 1; text-align: center; font-weight: 700; font-size: 18px; margin-right: 48px; }
+        .wheel-wrap { position: relative; width: min(92vw, 320px); height: min(92vw, 320px); margin: 8px 0 16px; }
+        #wheel-canvas { width: 100%; height: 100%; border-radius: 50%; box-shadow: 0 8px 32px rgba(0,0,0,0.45); }
+        .wheel-pointer {
+            position: absolute; top: -4px; left: 50%; transform: translateX(-50%);
+            width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent;
+            border-top: 22px solid #fff; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); z-index: 2;
+        }
+        .wheel-spin-btn {
+            width: 100%; max-width: 400px; padding: 16px; border: none; border-radius: 12px;
+            background: #0a84ff; color: #fff; font-size: 17px; font-weight: bold; cursor: pointer;
+        }
+        .wheel-spin-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        #wheel-status-line { color: #8e8e93; font-size: 13px; margin: 12px 0; text-align: center; max-width: 400px; }
+        #wheel-result {
+            display: none; margin-top: 8px; padding: 14px 18px; border-radius: 12px; background: #1c1c1e;
+            border: 1px solid #32d74b; color: #32d74b; font-size: 18px; font-weight: bold; max-width: 400px; width: 100%; box-sizing: border-box;
+        }
     </style>
 </head>
 <body>
@@ -61,6 +95,9 @@
             <input type="file" id="image-upload" accept="image/*">
         </label>
         <div id="quota-line">Загрузка лимита…</div>
+
+        <button type="button" class="wheel-open-btn" id="wheel-open-btn" disabled>🎡 Колесо фортуны</button>
+        <div id="wheel-hint">Откройте через бота в Telegram</div>
         
         <img id="preview" src="" alt="Скриншот">
         <button class="submit-btn" id="analyze-btn">🚀 Получить прогноз</button>
@@ -82,6 +119,20 @@
         </div>
     </div>
 
+    <div id="wheel-screen" aria-hidden="true">
+        <div class="wheel-topbar">
+            <button type="button" class="wheel-back" id="wheel-back">← Назад</button>
+            <div class="wheel-title">Колесо фортуны</div>
+        </div>
+        <div class="wheel-wrap">
+            <div class="wheel-pointer" aria-hidden="true"></div>
+            <canvas id="wheel-canvas" width="640" height="640"></canvas>
+        </div>
+        <div id="wheel-status-line">Загрузка…</div>
+        <button type="button" class="wheel-spin-btn" id="wheel-spin-btn" disabled>Крутить</button>
+        <div id="wheel-result"></div>
+    </div>
+
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
@@ -92,7 +143,11 @@
         const ANALYZE_URL = apiBase + "/analyze";
         const QUOTA_URL = apiBase + "/quota";
         const LEVEL_URL = apiBase + "/level";
+        const WHEEL_STATUS_URL = apiBase + "/wheel/status";
+        const WHEEL_SPIN_URL = apiBase + "/wheel/spin";
         const REF_LINK = urlParams.get("ref") || "https://lkhv.pro/66ca12";
+        const WHEEL_SECTORS = 8;
+        const WHEEL_COLORS = ["#2563eb", "#ea580c", "#7f1d1d", "#16a34a", "#0d9488", "#c026d3", "#6b7280", "#dc2626"];
         const REQUEST_TIMEOUT_MS = 120000;
 
         const tgUser = tg.initDataUnsafe && tg.initDataUnsafe.user;
@@ -214,6 +269,208 @@
 
         refreshQuota();
         refreshLevel();
+
+        let wheelRotationDeg = 0;
+        let wheelStatusCache = null;
+        let wheelSpinning = false;
+
+        const wheelOpenBtn = document.getElementById("wheel-open-btn");
+        const wheelHint = document.getElementById("wheel-hint");
+        const wheelScreen = document.getElementById("wheel-screen");
+        const wheelBack = document.getElementById("wheel-back");
+        const wheelCanvas = document.getElementById("wheel-canvas");
+        const wheelSpinBtn = document.getElementById("wheel-spin-btn");
+        const wheelStatusLine = document.getElementById("wheel-status-line");
+        const wheelResult = document.getElementById("wheel-result");
+        const wheelCtx = wheelCanvas.getContext("2d");
+
+        function formatCountdown(seconds) {
+            const s = Math.max(0, Math.floor(Number(seconds) || 0));
+            const h = Math.floor(s / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            const sec = s % 60;
+            return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+        }
+
+        function drawWheel(rotationDeg) {
+            const size = wheelCanvas.width;
+            const cx = size / 2;
+            const cy = size / 2;
+            const r = size * 0.46;
+            const seg = (2 * Math.PI) / WHEEL_SECTORS;
+            wheelCtx.clearRect(0, 0, size, size);
+            wheelCtx.save();
+            wheelCtx.translate(cx, cy);
+            wheelCtx.rotate((rotationDeg * Math.PI) / 180);
+            for (let i = 0; i < WHEEL_SECTORS; i++) {
+                const start = i * seg - Math.PI / 2;
+                const end = start + seg;
+                wheelCtx.beginPath();
+                wheelCtx.moveTo(0, 0);
+                wheelCtx.arc(0, 0, r, start, end);
+                wheelCtx.closePath();
+                wheelCtx.fillStyle = WHEEL_COLORS[i % WHEEL_COLORS.length];
+                wheelCtx.fill();
+                wheelCtx.strokeStyle = "rgba(255,255,255,0.35)";
+                wheelCtx.lineWidth = 3;
+                wheelCtx.stroke();
+                wheelCtx.save();
+                wheelCtx.rotate(start + seg / 2);
+                wheelCtx.textAlign = "center";
+                wheelCtx.fillStyle = "#fff";
+                wheelCtx.font = "bold 44px -apple-system, sans-serif";
+                wheelCtx.shadowColor = "rgba(0,0,0,0.6)";
+                wheelCtx.shadowBlur = 6;
+                wheelCtx.fillText(String(i + 1), r * 0.62, 14);
+                wheelCtx.restore();
+            }
+            wheelCtx.beginPath();
+            wheelCtx.arc(0, 0, r * 0.18, 0, 2 * Math.PI);
+            wheelCtx.fillStyle = "#eab308";
+            wheelCtx.fill();
+            wheelCtx.strokeStyle = "#fef08a";
+            wheelCtx.lineWidth = 4;
+            wheelCtx.stroke();
+            wheelCtx.restore();
+        }
+
+        function wheelStatusText(w) {
+            if (!w) return "Нет данных";
+            if (w.spin_unlimited) return "♾️ Безлимит — крути сколько угодно";
+            if (w.can_spin) return "✅ Сегодня можно крутить 1 раз";
+            return "⏳ Следующая прокрутка после 00:00 МСК · " + formatCountdown(w.seconds_until_reset);
+        }
+
+        function applyWheelUi(w) {
+            wheelStatusCache = w;
+            const can = w && (w.can_spin || w.spin_unlimited);
+            wheelSpinBtn.disabled = !can || wheelSpinning || !userId;
+            wheelStatusLine.textContent = wheelStatusText(w);
+            wheelHint.textContent = userId ? wheelStatusText(w) : "Откройте через бота в Telegram";
+            if (userId) {
+                wheelOpenBtn.disabled = false;
+            }
+        }
+
+        async function refreshWheelStatus() {
+            if (!userId) {
+                applyWheelUi(null);
+                return;
+            }
+            try {
+                const response = await fetchWithTimeout(
+                    WHEEL_STATUS_URL + "?user_id=" + encodeURIComponent(userId),
+                    { method: "GET" },
+                    30000
+                );
+                const raw = await response.text();
+                let data = {};
+                try { data = raw ? JSON.parse(raw) : {}; } catch (_) { return; }
+                if (response.ok && data.wheel) applyWheelUi(data.wheel);
+            } catch (_) {
+                wheelHint.textContent = "Колесо: не удалось загрузить статус";
+            }
+        }
+
+        function targetRotationForSector(sector, extraTurns) {
+            const seg = 360 / WHEEL_SECTORS;
+            const center = (sector - 0.5) * seg;
+            return extraTurns * 360 + (360 - center);
+        }
+
+        function animateWheelTo(targetDeg, durationMs) {
+            return new Promise(function(resolve) {
+                const start = wheelRotationDeg;
+                const delta = targetDeg - start;
+                const t0 = performance.now();
+                function frame(now) {
+                    const t = Math.min(1, (now - t0) / durationMs);
+                    const ease = 1 - Math.pow(1 - t, 3);
+                    wheelRotationDeg = start + delta * ease;
+                    drawWheel(wheelRotationDeg);
+                    if (t < 1) requestAnimationFrame(frame);
+                    else resolve();
+                }
+                requestAnimationFrame(frame);
+            });
+        }
+
+        async function doWheelSpin() {
+            if (!userId || wheelSpinning) return;
+            wheelSpinning = true;
+            wheelSpinBtn.disabled = true;
+            wheelResult.style.display = "none";
+            try {
+                const response = await fetchWithTimeout(
+                    WHEEL_SPIN_URL,
+                    {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ user_id: userId }),
+                    },
+                    30000
+                );
+                const raw = await response.text();
+                let data = {};
+                try { data = raw ? JSON.parse(raw) : {}; } catch (_) {
+                    throw new Error("Ответ сервера не JSON");
+                }
+                if (!response.ok || !data.ok) {
+                    if (data.wheel) applyWheelUi(data.wheel);
+                    throw new Error(data.error || ("HTTP " + response.status));
+                }
+                const sector = data.sector;
+                const target = targetRotationForSector(sector, 5 + Math.floor(Math.random() * 3));
+                const normalized = target + (360 - (wheelRotationDeg % 360));
+                await animateWheelTo(wheelRotationDeg + normalized, 4200);
+                wheelResult.textContent = "🎉 Выпало: " + sector;
+                wheelResult.style.display = "block";
+                wheelResult.style.borderColor = "#32d74b";
+                wheelResult.style.color = "#32d74b";
+                if (data.status) applyWheelUi(data.status);
+                else await refreshWheelStatus();
+            } catch (err) {
+                wheelResult.textContent = "⚠️ " + (err.message || String(err));
+                wheelResult.style.display = "block";
+                wheelResult.style.borderColor = "#ff453a";
+                wheelResult.style.color = "#ff453a";
+                await refreshWheelStatus();
+            } finally {
+                wheelSpinning = false;
+            }
+        }
+
+        function openWheelScreen() {
+            wheelScreen.classList.add("open");
+            wheelScreen.setAttribute("aria-hidden", "false");
+            drawWheel(wheelRotationDeg);
+            refreshWheelStatus();
+        }
+
+        function closeWheelScreen() {
+            wheelScreen.classList.remove("open");
+            wheelScreen.setAttribute("aria-hidden", "true");
+        }
+
+        wheelOpenBtn.addEventListener("click", openWheelScreen);
+        wheelBack.addEventListener("click", closeWheelScreen);
+        wheelSpinBtn.addEventListener("click", doWheelSpin);
+
+        if (userId) {
+            wheelOpenBtn.disabled = false;
+            refreshWheelStatus();
+        }
+        drawWheel(0);
+
+        setInterval(function() {
+            if (wheelStatusCache && !wheelStatusCache.spin_unlimited && !wheelStatusCache.can_spin) {
+                let s = wheelStatusCache.seconds_until_reset;
+                if (s > 0) {
+                    wheelStatusCache.seconds_until_reset = s - 1;
+                    applyWheelUi(wheelStatusCache);
+                }
+            }
+        }, 1000);
 
         const imageUpload = document.getElementById("image-upload");
         const imageUploadBottom = document.getElementById("image-upload-bottom");

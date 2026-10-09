@@ -464,10 +464,19 @@
             }
         }
 
-        function absoluteRotationForSector(sector, extraTurns, offsetDeg) {
+        /** 0 = начало сектора (по часовой), 100 = конец, 50 ≈ середина */
+        function randomStopOffsetPct() {
+            if (Math.random() < 0.55) {
+                return Math.random() < 0.5 ? Math.random() * 22 : 78 + Math.random() * 22;
+            }
+            return Math.random() * 100;
+        }
+
+        function absoluteRotationForSector(sector, extraTurns, offsetPct) {
             const seg = 360 / WHEEL_SECTORS;
-            const center = (sector - 0.5) * seg;
-            const base = extraTurns * 360 + (360 - center) + (offsetDeg || 0);
+            const t = Math.max(0, Math.min(100, offsetPct)) / 100;
+            const position = (sector - 1 + t) * seg;
+            const base = extraTurns * 360 + (360 - position);
             const cur = wheelRotationDeg;
             let target = cur + (base - ((cur % 360) + 360) % 360);
             if (target <= cur) target += 360;
@@ -491,17 +500,10 @@
             });
         }
 
-        async function runSpinAnimation(sector, nearMiss, nearMissSector) {
+        async function runSpinAnimation(sector) {
             const extra = 5 + Math.floor(Math.random() * 3);
-            if (nearMiss && nearMissSector && nearMissSector !== sector) {
-                const overshoot = absoluteRotationForSector(nearMissSector, extra, 4);
-                await animateWheelTo(overshoot, 3200);
-                bumpFlapper(28);
-                await animateWheelTo(absoluteRotationForSector(sector, 0, -6), 900);
-            } else {
-                const jitter = (Math.random() - 0.5) * (360 / WHEEL_SECTORS * 0.35);
-                await animateWheelTo(absoluteRotationForSector(sector, extra, jitter), 4200);
-            }
+            const offsetPct = randomStopOffsetPct();
+            await animateWheelTo(absoluteRotationForSector(sector, extra, offsetPct), 4200);
         }
 
         async function doWheelSpin() {
@@ -528,7 +530,7 @@
                     if (data.wheel) applyWheelUi(data.wheel);
                     throw new Error(data.error || ("HTTP " + response.status));
                 }
-                await runSpinAnimation(data.sector, data.near_miss, data.near_miss_sector);
+                await runSpinAnimation(data.sector);
                 const modal = (data.delivery && data.delivery.modal) || {};
                 let body = modal.body || ("Выпало: " + (data.label || data.sector));
                 if (data.delivery && data.delivery.telegram_error) {

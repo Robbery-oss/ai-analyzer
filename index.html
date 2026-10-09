@@ -73,10 +73,26 @@
         }
         .wheel-spin-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         #wheel-status-line { color: #8e8e93; font-size: 13px; margin: 12px 0; text-align: center; max-width: 400px; }
-        #wheel-result {
-            display: none; margin-top: 8px; padding: 14px 18px; border-radius: 12px; background: #1c1c1e;
-            border: 1px solid #32d74b; color: #32d74b; font-size: 18px; font-weight: bold; max-width: 400px; width: 100%; box-sizing: border-box;
+        #wheel-modal {
+            display: none; position: fixed; inset: 0; z-index: 300; background: rgba(0,0,0,0.72);
+            align-items: center; justify-content: center; padding: 20px; box-sizing: border-box;
         }
+        #wheel-modal.open { display: flex; }
+        .wheel-modal-box {
+            background: #1c1c1e; border: 1px solid #3a3a3c; border-radius: 16px; padding: 22px 20px;
+            max-width: 340px; width: 100%; text-align: center;
+        }
+        .wheel-modal-box h3 { margin: 0 0 12px; color: #ffd60a; font-size: 20px; }
+        .wheel-modal-box p { margin: 0 0 18px; color: #e5e5ea; font-size: 14px; line-height: 1.45; }
+        .wheel-modal-close {
+            width: 100%; padding: 12px; border: none; border-radius: 10px; background: #0a84ff;
+            color: #fff; font-weight: 600; cursor: pointer;
+        }
+        .wheel-flapper {
+            position: absolute; top: -2px; left: 50%; width: 28px; height: 36px; margin-left: -14px;
+            transform-origin: 50% 8px; z-index: 3; transition: transform 0.08s ease-out;
+        }
+        .wheel-flapper svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5)); }
     </style>
 </head>
 <body>
@@ -125,12 +141,20 @@
             <div class="wheel-title">Колесо фортуны</div>
         </div>
         <div class="wheel-wrap">
-            <div class="wheel-pointer" aria-hidden="true"></div>
+            <div class="wheel-flapper" id="wheel-flapper" aria-hidden="true">
+                <svg viewBox="0 0 28 36"><path d="M14 34 L4 8 Q14 2 24 8 Z" fill="#fff"/></svg>
+            </div>
             <canvas id="wheel-canvas" width="640" height="640"></canvas>
         </div>
         <div id="wheel-status-line">Загрузка…</div>
         <button type="button" class="wheel-spin-btn" id="wheel-spin-btn" disabled>Крутить</button>
-        <div id="wheel-result"></div>
+    </div>
+    <div id="wheel-modal" aria-hidden="true">
+        <div class="wheel-modal-box">
+            <h3 id="wheel-modal-title">Приз</h3>
+            <p id="wheel-modal-body"></p>
+            <button type="button" class="wheel-modal-close" id="wheel-modal-close">Понятно</button>
+        </div>
     </div>
 
     <script>
@@ -147,7 +171,23 @@
         const WHEEL_SPIN_URL = apiBase + "/wheel/spin";
         const REF_LINK = urlParams.get("ref") || "https://lkhv.pro/66ca12";
         const WHEEL_SECTORS = 8;
-        const WHEEL_COLORS = ["#2563eb", "#ea580c", "#7f1d1d", "#16a34a", "#0d9488", "#c026d3", "#6b7280", "#dc2626"];
+        const DEFAULT_WHEEL_LAYOUT = [
+            { index: 1, label: "500₽", prize: "decoy" },
+            { index: 2, label: "VIP", prize: "vip" },
+            { index: 3, label: "PRO", prize: "decoy" },
+            { index: 4, label: "+1", prize: "plus_one" },
+            { index: 5, label: "Экспресс", prize: "express" },
+            { index: 6, label: "Пусто", prize: "empty" },
+            { index: 7, label: "1000₽", prize: "decoy" },
+            { index: 8, label: "PREMIUM", prize: "decoy" }
+        ];
+        const PRIZE_COLORS = {
+            decoy: "#b45309",
+            vip: "#16a34a",
+            plus_one: "#2563eb",
+            express: "#0d9488",
+            empty: "#52525b"
+        };
         const REQUEST_TIMEOUT_MS = 120000;
 
         const tgUser = tg.initDataUnsafe && tg.initDataUnsafe.user;
@@ -162,8 +202,9 @@
         function formatQuotaText(quota) {
             if (!quota) return "Лимит: откройте через бота в Telegram";
             if (quota.unlimited) return "Доступно анализов: ♾️ безлимит";
-            const left = Math.max(0, (quota.limit || 0) - (quota.used || 0));
-            return `Доступно анализов: <b>${left}</b> из ${quota.limit}`;
+            const eff = quota.effective_limit != null ? quota.effective_limit : quota.limit;
+            const left = Math.max(0, (eff || 0) - (quota.used || 0));
+            return `Доступно анализов: <b>${left}</b> из ${eff}`;
         }
 
         function renderQuota(quota) {
@@ -273,6 +314,8 @@
         let wheelRotationDeg = 0;
         let wheelStatusCache = null;
         let wheelSpinning = false;
+        let wheelLayout = DEFAULT_WHEEL_LAYOUT.slice();
+        let lastPinTick = -1;
 
         const wheelOpenBtn = document.getElementById("wheel-open-btn");
         const wheelHint = document.getElementById("wheel-hint");
@@ -281,7 +324,11 @@
         const wheelCanvas = document.getElementById("wheel-canvas");
         const wheelSpinBtn = document.getElementById("wheel-spin-btn");
         const wheelStatusLine = document.getElementById("wheel-status-line");
-        const wheelResult = document.getElementById("wheel-result");
+        const wheelFlapper = document.getElementById("wheel-flapper");
+        const wheelModal = document.getElementById("wheel-modal");
+        const wheelModalTitle = document.getElementById("wheel-modal-title");
+        const wheelModalBody = document.getElementById("wheel-modal-body");
+        const wheelModalClose = document.getElementById("wheel-modal-close");
         const wheelCtx = wheelCanvas.getContext("2d");
 
         function formatCountdown(seconds) {
@@ -292,24 +339,36 @@
             return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
         }
 
-        function drawWheel(rotationDeg) {
+        function layoutEntry(sectorIndex) {
+            return wheelLayout.find(function(s) { return s.index === sectorIndex; }) || { label: String(sectorIndex), prize: "decoy" };
+        }
+
+        function bumpFlapper(strength) {
+            const deg = strength || 22;
+            wheelFlapper.style.transform = "rotate(" + deg + "deg)";
+            setTimeout(function() { wheelFlapper.style.transform = "rotate(0deg)"; }, 90);
+        }
+
+        function drawWheel(rotationDeg, allowTicks) {
             const size = wheelCanvas.width;
             const cx = size / 2;
             const cy = size / 2;
-            const r = size * 0.46;
+            const r = size * 0.44;
+            const rim = size * 0.48;
             const seg = (2 * Math.PI) / WHEEL_SECTORS;
             wheelCtx.clearRect(0, 0, size, size);
             wheelCtx.save();
             wheelCtx.translate(cx, cy);
             wheelCtx.rotate((rotationDeg * Math.PI) / 180);
             for (let i = 0; i < WHEEL_SECTORS; i++) {
+                const entry = layoutEntry(i + 1);
                 const start = i * seg - Math.PI / 2;
                 const end = start + seg;
                 wheelCtx.beginPath();
                 wheelCtx.moveTo(0, 0);
                 wheelCtx.arc(0, 0, r, start, end);
                 wheelCtx.closePath();
-                wheelCtx.fillStyle = WHEEL_COLORS[i % WHEEL_COLORS.length];
+                wheelCtx.fillStyle = PRIZE_COLORS[entry.prize] || "#333";
                 wheelCtx.fill();
                 wheelCtx.strokeStyle = "rgba(255,255,255,0.35)";
                 wheelCtx.lineWidth = 3;
@@ -318,20 +377,40 @@
                 wheelCtx.rotate(start + seg / 2);
                 wheelCtx.textAlign = "center";
                 wheelCtx.fillStyle = "#fff";
-                wheelCtx.font = "bold 44px -apple-system, sans-serif";
-                wheelCtx.shadowColor = "rgba(0,0,0,0.6)";
+                let fontSize = entry.label.length > 6 ? 28 : 34;
+                wheelCtx.font = "bold " + fontSize + "px -apple-system, sans-serif";
+                wheelCtx.shadowColor = "rgba(0,0,0,0.65)";
                 wheelCtx.shadowBlur = 6;
-                wheelCtx.fillText(String(i + 1), r * 0.62, 14);
+                wheelCtx.fillText(entry.label, r * 0.58, 10);
                 wheelCtx.restore();
             }
+            for (let i = 0; i < WHEEL_SECTORS; i++) {
+                const ang = i * seg - Math.PI / 2;
+                const px = Math.cos(ang) * rim;
+                const py = Math.sin(ang) * rim;
+                wheelCtx.beginPath();
+                wheelCtx.arc(px, py, size * 0.012, 0, 2 * Math.PI);
+                wheelCtx.fillStyle = "#f4f4f5";
+                wheelCtx.fill();
+                wheelCtx.strokeStyle = "#a1a1aa";
+                wheelCtx.lineWidth = 2;
+                wheelCtx.stroke();
+            }
             wheelCtx.beginPath();
-            wheelCtx.arc(0, 0, r * 0.18, 0, 2 * Math.PI);
+            wheelCtx.arc(0, 0, r * 0.16, 0, 2 * Math.PI);
             wheelCtx.fillStyle = "#eab308";
             wheelCtx.fill();
             wheelCtx.strokeStyle = "#fef08a";
             wheelCtx.lineWidth = 4;
             wheelCtx.stroke();
             wheelCtx.restore();
+            if (allowTicks) {
+                const tick = Math.floor((((rotationDeg % 360) + 360) % 360) / (360 / WHEEL_SECTORS));
+                if (tick !== lastPinTick) {
+                    lastPinTick = tick;
+                    bumpFlapper(18);
+                }
+            }
         }
 
         function wheelStatusText(w) {
@@ -343,13 +422,26 @@
 
         function applyWheelUi(w) {
             wheelStatusCache = w;
+            if (w && w.layout && w.layout.length) {
+                wheelLayout = w.layout.slice().sort(function(a, b) { return a.index - b.index; });
+            }
             const can = w && (w.can_spin || w.spin_unlimited);
             wheelSpinBtn.disabled = !can || wheelSpinning || !userId;
             wheelStatusLine.textContent = wheelStatusText(w);
             wheelHint.textContent = userId ? wheelStatusText(w) : "Откройте через бота в Telegram";
-            if (userId) {
-                wheelOpenBtn.disabled = false;
-            }
+            if (userId) wheelOpenBtn.disabled = false;
+        }
+
+        function showWheelModal(title, body) {
+            wheelModalTitle.textContent = title || "Приз";
+            wheelModalBody.textContent = body || "";
+            wheelModal.classList.add("open");
+            wheelModal.setAttribute("aria-hidden", "false");
+        }
+
+        function hideWheelModal() {
+            wheelModal.classList.remove("open");
+            wheelModal.setAttribute("aria-hidden", "true");
         }
 
         async function refreshWheelStatus() {
@@ -372,10 +464,14 @@
             }
         }
 
-        function targetRotationForSector(sector, extraTurns) {
+        function absoluteRotationForSector(sector, extraTurns, offsetDeg) {
             const seg = 360 / WHEEL_SECTORS;
             const center = (sector - 0.5) * seg;
-            return extraTurns * 360 + (360 - center);
+            const base = extraTurns * 360 + (360 - center) + (offsetDeg || 0);
+            const cur = wheelRotationDeg;
+            let target = cur + (base - ((cur % 360) + 360) % 360);
+            if (target <= cur) target += 360;
+            return target;
         }
 
         function animateWheelTo(targetDeg, durationMs) {
@@ -387,7 +483,7 @@
                     const t = Math.min(1, (now - t0) / durationMs);
                     const ease = 1 - Math.pow(1 - t, 3);
                     wheelRotationDeg = start + delta * ease;
-                    drawWheel(wheelRotationDeg);
+                    drawWheel(wheelRotationDeg, true);
                     if (t < 1) requestAnimationFrame(frame);
                     else resolve();
                 }
@@ -395,11 +491,24 @@
             });
         }
 
+        async function runSpinAnimation(sector, nearMiss, nearMissSector) {
+            const extra = 5 + Math.floor(Math.random() * 3);
+            if (nearMiss && nearMissSector && nearMissSector !== sector) {
+                const overshoot = absoluteRotationForSector(nearMissSector, extra, 4);
+                await animateWheelTo(overshoot, 3200);
+                bumpFlapper(28);
+                await animateWheelTo(absoluteRotationForSector(sector, 0, -6), 900);
+            } else {
+                const jitter = (Math.random() - 0.5) * (360 / WHEEL_SECTORS * 0.35);
+                await animateWheelTo(absoluteRotationForSector(sector, extra, jitter), 4200);
+            }
+        }
+
         async function doWheelSpin() {
             if (!userId || wheelSpinning) return;
             wheelSpinning = true;
             wheelSpinBtn.disabled = true;
-            wheelResult.style.display = "none";
+            hideWheelModal();
             try {
                 const response = await fetchWithTimeout(
                     WHEEL_SPIN_URL,
@@ -408,7 +517,7 @@
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ user_id: userId }),
                     },
-                    30000
+                    45000
                 );
                 const raw = await response.text();
                 let data = {};
@@ -419,30 +528,29 @@
                     if (data.wheel) applyWheelUi(data.wheel);
                     throw new Error(data.error || ("HTTP " + response.status));
                 }
-                const sector = data.sector;
-                const target = targetRotationForSector(sector, 5 + Math.floor(Math.random() * 3));
-                const normalized = target + (360 - (wheelRotationDeg % 360));
-                await animateWheelTo(wheelRotationDeg + normalized, 4200);
-                wheelResult.textContent = "🎉 Выпало: " + sector;
-                wheelResult.style.display = "block";
-                wheelResult.style.borderColor = "#32d74b";
-                wheelResult.style.color = "#32d74b";
+                await runSpinAnimation(data.sector, data.near_miss, data.near_miss_sector);
+                const modal = (data.delivery && data.delivery.modal) || {};
+                let body = modal.body || ("Выпало: " + (data.label || data.sector));
+                if (data.delivery && data.delivery.telegram_error) {
+                    body += " (" + data.delivery.telegram_error + ")";
+                }
+                showWheelModal(modal.title || data.label, body);
+                if (data.delivery && data.delivery.quota) renderQuota(data.delivery.quota);
                 if (data.status) applyWheelUi(data.status);
                 else await refreshWheelStatus();
+                refreshQuota();
             } catch (err) {
-                wheelResult.textContent = "⚠️ " + (err.message || String(err));
-                wheelResult.style.display = "block";
-                wheelResult.style.borderColor = "#ff453a";
-                wheelResult.style.color = "#ff453a";
-                await refreshWheelStatus();
+                showWheelModal("Ошибка", err.message || String(err));
             } finally {
                 wheelSpinning = false;
+                if (wheelStatusCache) applyWheelUi(wheelStatusCache);
             }
         }
 
         function openWheelScreen() {
             wheelScreen.classList.add("open");
             wheelScreen.setAttribute("aria-hidden", "false");
+            lastPinTick = -1;
             drawWheel(wheelRotationDeg);
             refreshWheelStatus();
         }
@@ -450,11 +558,13 @@
         function closeWheelScreen() {
             wheelScreen.classList.remove("open");
             wheelScreen.setAttribute("aria-hidden", "true");
+            hideWheelModal();
         }
 
         wheelOpenBtn.addEventListener("click", openWheelScreen);
         wheelBack.addEventListener("click", closeWheelScreen);
         wheelSpinBtn.addEventListener("click", doWheelSpin);
+        wheelModalClose.addEventListener("click", hideWheelModal);
 
         if (userId) {
             wheelOpenBtn.disabled = false;

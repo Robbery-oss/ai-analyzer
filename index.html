@@ -464,12 +464,16 @@
             }
         }
 
-        /** 0 = начало сектора (по часовой), 100 = конец, 50 ≈ середина */
+        /**
+         * Только у линии между секторами (без «середины»).
+         * 0 = граница с предыдущим сектором, 100 = граница со следующим.
+         */
         function randomStopOffsetPct() {
-            if (Math.random() < 0.55) {
-                return Math.random() < 0.5 ? Math.random() * 22 : 78 + Math.random() * 22;
+            const edgeBand = 7;
+            if (Math.random() < 0.5) {
+                return Math.random() * edgeBand;
             }
-            return Math.random() * 100;
+            return 100 - Math.random() * edgeBand;
         }
 
         function absoluteRotationForSector(sector, extraTurns, offsetPct) {

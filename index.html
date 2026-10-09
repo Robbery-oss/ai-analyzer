@@ -464,27 +464,20 @@
             }
         }
 
-        /**
-         * Только у линии между секторами (без «середины»).
-         * 0 = граница с предыдущим сектором, 100 = граница со следующим.
-         */
+        /** 0 = линия до сектора, 100 = линия после, равномерно по всей ширине */
         function randomStopOffsetPct() {
-            const edgeBand = 7;
-            if (Math.random() < 0.5) {
-                return Math.random() * edgeBand;
-            }
-            return 100 - Math.random() * edgeBand;
+            return Math.random() * 100;
         }
 
         function absoluteRotationForSector(sector, extraTurns, offsetPct) {
             const seg = 360 / WHEEL_SECTORS;
-            const t = Math.max(0, Math.min(100, offsetPct)) / 100;
-            const position = (sector - 1 + t) * seg;
-            const base = extraTurns * 360 + (360 - position);
-            const cur = wheelRotationDeg;
-            let target = cur + (base - ((cur % 360) + 360) % 360);
-            if (target <= cur) target += 360;
-            return target;
+            const t = Math.max(0, Math.min(100, Number(offsetPct))) / 100;
+            const positionOnCircle = (sector - 1 + t) * seg;
+            const targetMod = ((360 - positionOnCircle) % 360 + 360) % 360;
+            const curMod = ((wheelRotationDeg % 360) + 360) % 360;
+            let deltaMod = targetMod - curMod;
+            if (deltaMod <= 0.05) deltaMod += 360;
+            return wheelRotationDeg + extraTurns * 360 + deltaMod;
         }
 
         function animateWheelTo(targetDeg, durationMs) {
@@ -504,10 +497,13 @@
             });
         }
 
-        async function runSpinAnimation(sector) {
+        async function runSpinAnimation(sector, offsetPct) {
             const extra = 5 + Math.floor(Math.random() * 3);
-            const offsetPct = randomStopOffsetPct();
-            await animateWheelTo(absoluteRotationForSector(sector, extra, offsetPct), 4200);
+            const stop =
+                offsetPct != null && !Number.isNaN(Number(offsetPct))
+                    ? Number(offsetPct)
+                    : randomStopOffsetPct();
+            await animateWheelTo(absoluteRotationForSector(sector, extra, stop), 4200);
         }
 
         async function doWheelSpin() {
@@ -534,7 +530,7 @@
                     if (data.wheel) applyWheelUi(data.wheel);
                     throw new Error(data.error || ("HTTP " + response.status));
                 }
-                await runSpinAnimation(data.sector);
+                await runSpinAnimation(data.sector, data.stop_offset_pct);
                 const modal = (data.delivery && data.delivery.modal) || {};
                 let body = modal.body || ("Выпало: " + (data.label || data.sector));
                 if (data.delivery && data.delivery.telegram_error) {

@@ -169,6 +169,7 @@
         const LEVEL_URL = apiBase + "/level";
         const WHEEL_STATUS_URL = apiBase + "/wheel/status";
         const WHEEL_SPIN_URL = apiBase + "/wheel/spin";
+        const WHEEL_DELIVER_URL = apiBase + "/wheel/deliver";
         const REF_LINK = urlParams.get("ref") || "https://lkhv.pro/66ca12";
         const WHEEL_SECTORS = 8;
         const DEFAULT_WHEEL_LAYOUT = [
@@ -534,6 +535,40 @@
                     throw new Error(data.error || ("HTTP " + response.status));
                 }
                 await runSpinAnimation(data.sector, data.stop_offset_pct);
+                if (
+                    data.spin_id &&
+                    data.delivery &&
+                    data.delivery.telegram_pending
+                ) {
+                    try {
+                        const dr = await fetchWithTimeout(
+                            WHEEL_DELIVER_URL,
+                            {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    user_id: userId,
+                                    spin_id: data.spin_id,
+                                }),
+                            },
+                            45000
+                        );
+                        const dRaw = await dr.text();
+                        let dData = {};
+                        try { dData = dRaw ? JSON.parse(dRaw) : {}; } catch (_) {}
+                        if (dData.ok) {
+                            data.delivery.telegram_ok = true;
+                            data.delivery.telegram_pending = false;
+                        } else if (dData.error) {
+                            data.delivery.telegram_ok = false;
+                            data.delivery.telegram_error = dData.error;
+                        }
+                    } catch (delErr) {
+                        data.delivery.telegram_ok = false;
+                        data.delivery.telegram_error =
+                            delErr.message || String(delErr);
+                    }
+                }
                 const modal = (data.delivery && data.delivery.modal) || {};
                 let body = modal.body || ("Выпало: " + (data.label || data.sector));
                 if (data.delivery && data.delivery.telegram_error) {

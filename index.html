@@ -524,7 +524,10 @@
                 const raw = await response.text();
                 let data = {};
                 try { data = raw ? JSON.parse(raw) : {}; } catch (_) {
-                    throw new Error("Ответ сервера не JSON");
+                    const hint = raw && String(raw).trim().startsWith("<")
+                        ? " Сервер вернул HTML — задеплой Render (ai-bot-backend-lmvc) или подожди пробуждение."
+                        : (raw ? " " + String(raw).slice(0, 120) : "");
+                    throw new Error("Ответ сервера не JSON." + hint);
                 }
                 if (!response.ok || !data.ok) {
                     if (data.wheel) applyWheelUi(data.wheel);

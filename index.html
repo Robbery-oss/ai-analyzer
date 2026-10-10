@@ -117,6 +117,43 @@
             color: #a8a29e; font-size: 13px; margin: 12px 0; text-align: center; max-width: 400px;
             position: relative; z-index: 2;
         }
+        .wheel-info-row {
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            margin: 10px 0 0; max-width: 400px; width: 100%; position: relative; z-index: 2;
+        }
+        .wheel-info-btn {
+            width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(255, 220, 120, 0.45);
+            background: rgba(40, 35, 28, 0.85); color: #f5c542; font-size: 18px; font-weight: 700;
+            cursor: pointer; flex-shrink: 0; user-select: none; -webkit-user-select: none;
+            touch-action: manipulation;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+        }
+        .wheel-info-btn:active { transform: scale(0.96); background: rgba(60, 50, 35, 0.95); }
+        .wheel-info-hint { color: #78716c; font-size: 12px; line-height: 1.3; text-align: left; }
+        .wheel-info-panel {
+            display: none; position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+            z-index: 250; width: min(92vw, 380px); max-height: min(52vh, 360px); overflow-y: auto;
+            background: rgba(22, 20, 18, 0.96); border: 1px solid rgba(245, 197, 66, 0.35);
+            border-radius: 16px; padding: 14px 16px; box-sizing: border-box;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(10px);
+        }
+        .wheel-info-panel.open { display: block; }
+        .wheel-info-panel h4 {
+            margin: 0 0 10px; font-size: 15px; color: #f5c542; font-weight: 800; text-align: center;
+        }
+        .wheel-info-panel dl { margin: 0; }
+        .wheel-info-panel dt {
+            color: #fde68a; font-weight: 700; font-size: 13px; margin-top: 8px;
+        }
+        .wheel-info-panel dt:first-of-type { margin-top: 0; }
+        .wheel-info-panel dd {
+            margin: 2px 0 0; color: #d6d3d1; font-size: 12px; line-height: 1.4;
+        }
+        .wheel-info-backdrop {
+            display: none; position: fixed; inset: 0; z-index: 240; background: rgba(0, 0, 0, 0.45);
+        }
+        .wheel-info-backdrop.open { display: block; }
         #wheel-modal {
             display: none; position: fixed; inset: 0; z-index: 300; background: rgba(0,0,0,0.72);
             align-items: center; justify-content: center; padding: 20px; box-sizing: border-box;
@@ -211,6 +248,15 @@
         </div>
         <div id="wheel-status-line">Загрузка…</div>
         <button type="button" class="wheel-spin-btn" id="wheel-spin-btn" disabled>Крутить</button>
+        <div class="wheel-info-row">
+            <button type="button" class="wheel-info-btn" id="wheel-info-btn" aria-expanded="false" aria-controls="wheel-info-panel" title="Секторы колеса">ℹ️</button>
+            <span class="wheel-info-hint">Зажми или нажми ℹ️ — что значит каждый сектор</span>
+        </div>
+    </div>
+    <div class="wheel-info-backdrop" id="wheel-info-backdrop" aria-hidden="true"></div>
+    <div id="wheel-info-panel" class="wheel-info-panel" aria-hidden="true" role="dialog" aria-labelledby="wheel-info-title">
+        <h4 id="wheel-info-title">Секторы колеса</h4>
+        <dl id="wheel-info-list"></dl>
     </div>
     <div id="wheel-modal" aria-hidden="true">
         <div class="wheel-modal-box">
@@ -243,7 +289,17 @@
             { index: 5, label: "Экспресс", prize: "express" },
             { index: 6, label: "Пусто", prize: "empty" },
             { index: 7, label: "1000₽", prize: "decoy" },
-            { index: 8, label: "PREMIUM", prize: "decoy" }
+            { index: 8, label: "Платник", prize: "decoy" }
+        ];
+        const WHEEL_SECTOR_HELP = [
+            { label: "500₽", text: "Ваучер" },
+            { label: "VIP", text: "VIP-прогноз на сегодня" },
+            { label: "PRO", text: "Безлимит на анализ матчей" },
+            { label: "+1", text: "+1 анализ скрина на сегодня" },
+            { label: "Экспресс", text: "Экспресс дня в чат с ботом" },
+            { label: "Пусто", text: "Приза нет. VIP +20% вероятность на следующий день" },
+            { label: "1000₽", text: "Ваучер" },
+            { label: "Платник", text: "Платный прогноз" }
         ];
         /** Градиенты секторов 1–8 как на референсе (canvas). */
         const SECTOR_VISUAL = {
@@ -776,7 +832,64 @@
             wheelScreen.classList.remove("open");
             wheelScreen.setAttribute("aria-hidden", "true");
             hideWheelModal();
+            setWheelInfoOpen(false);
         }
+
+        const wheelInfoBtn = document.getElementById("wheel-info-btn");
+        const wheelInfoPanel = document.getElementById("wheel-info-panel");
+        const wheelInfoBackdrop = document.getElementById("wheel-info-backdrop");
+        const wheelInfoList = document.getElementById("wheel-info-list");
+        let wheelInfoHoldTimer = null;
+        let wheelInfoHoldTriggered = false;
+        const WHEEL_INFO_HOLD_MS = 420;
+
+        function setWheelInfoOpen(open) {
+            wheelInfoPanel.classList.toggle("open", open);
+            wheelInfoBackdrop.classList.toggle("open", open);
+            wheelInfoPanel.setAttribute("aria-hidden", open ? "false" : "true");
+            wheelInfoBackdrop.setAttribute("aria-hidden", open ? "false" : "true");
+            wheelInfoBtn.setAttribute("aria-expanded", open ? "true" : "false");
+        }
+
+        function toggleWheelInfo() {
+            setWheelInfoOpen(!wheelInfoPanel.classList.contains("open"));
+        }
+
+        function clearWheelInfoHold() {
+            if (wheelInfoHoldTimer) {
+                clearTimeout(wheelInfoHoldTimer);
+                wheelInfoHoldTimer = null;
+            }
+        }
+
+        function startWheelInfoHold() {
+            wheelInfoHoldTriggered = false;
+            clearWheelInfoHold();
+            wheelInfoHoldTimer = setTimeout(function() {
+                wheelInfoHoldTriggered = true;
+                setWheelInfoOpen(true);
+            }, WHEEL_INFO_HOLD_MS);
+        }
+
+        wheelInfoList.innerHTML = WHEEL_SECTOR_HELP.map(function(item) {
+            return "<dt>" + escapeHtml(item.label) + "</dt><dd>" + escapeHtml(item.text) + "</dd>";
+        }).join("");
+
+        wheelInfoBtn.addEventListener("click", function(e) {
+            if (wheelInfoHoldTriggered) {
+                wheelInfoHoldTriggered = false;
+                e.preventDefault();
+                return;
+            }
+            toggleWheelInfo();
+        });
+        wheelInfoBtn.addEventListener("mousedown", startWheelInfoHold);
+        wheelInfoBtn.addEventListener("mouseup", clearWheelInfoHold);
+        wheelInfoBtn.addEventListener("mouseleave", clearWheelInfoHold);
+        wheelInfoBtn.addEventListener("touchstart", startWheelInfoHold, { passive: true });
+        wheelInfoBtn.addEventListener("touchend", clearWheelInfoHold);
+        wheelInfoBtn.addEventListener("touchcancel", clearWheelInfoHold);
+        wheelInfoBackdrop.addEventListener("click", function() { setWheelInfoOpen(false); });
 
         wheelOpenBtn.addEventListener("click", openWheelScreen);
         wheelBack.addEventListener("click", closeWheelScreen);

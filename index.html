@@ -51,28 +51,72 @@
         .wheel-open-btn:disabled { opacity: 0.45; cursor: not-allowed; }
         #wheel-hint { color: #8e8e93; font-size: 12px; margin: 0 0 12px; min-height: 16px; }
         #wheel-screen {
-            display: none; position: fixed; inset: 0; z-index: 200; background: var(--tg-theme-bg-color, #0d0d0f);
+            display: none; position: fixed; inset: 0; z-index: 200;
+            background: radial-gradient(ellipse 130% 90% at 50% 38%, #1f1410 0%, #0a0908 42%, #030304 100%);
             flex-direction: column; align-items: center; padding: 16px; box-sizing: border-box; overflow-y: auto;
         }
         #wheel-screen.open { display: flex; }
-        .wheel-topbar { width: 100%; max-width: 400px; display: flex; align-items: center; margin-bottom: 8px; }
+        .wheel-bg-glow {
+            position: fixed; inset: 0; pointer-events: none; z-index: 0;
+            background:
+                radial-gradient(circle at 50% 44%, rgba(255, 140, 40, 0.38) 0%, transparent 48%),
+                radial-gradient(circle at 50% 44%, rgba(255, 200, 80, 0.12) 0%, transparent 62%);
+        }
+        .wheel-sparks {
+            position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden;
+        }
+        .wheel-sparks i {
+            position: absolute; display: block; border-radius: 50%;
+            background: radial-gradient(circle, rgba(255, 220, 120, 0.9) 0%, transparent 70%);
+            animation: wheelSparkFloat 6s ease-in-out infinite;
+        }
+        .wheel-sparks i:nth-child(1) { width: 6px; height: 6px; left: 18%; top: 28%; animation-delay: 0s; }
+        .wheel-sparks i:nth-child(2) { width: 4px; height: 4px; left: 78%; top: 32%; animation-delay: 1.2s; }
+        .wheel-sparks i:nth-child(3) { width: 8px; height: 8px; left: 72%; top: 58%; animation-delay: 2.1s; opacity: 0.7; }
+        .wheel-sparks i:nth-child(4) { width: 5px; height: 5px; left: 22%; top: 62%; animation-delay: 0.8s; }
+        .wheel-sparks i:nth-child(5) { width: 3px; height: 3px; left: 50%; top: 22%; animation-delay: 3s; }
+        .wheel-sparks i:nth-child(6) { width: 7px; height: 7px; left: 12%; top: 48%; animation-delay: 1.8s; }
+        @keyframes wheelSparkFloat {
+            0%, 100% { transform: translateY(0) scale(1); opacity: 0.35; }
+            50% { transform: translateY(-10px) scale(1.15); opacity: 0.85; }
+        }
+        .wheel-topbar {
+            width: 100%; max-width: 400px; display: flex; align-items: center; margin-bottom: 8px;
+            position: relative; z-index: 2;
+        }
         .wheel-back {
-            background: none; border: none; color: #0a84ff; font-size: 16px; cursor: pointer; padding: 8px 0;
+            background: none; border: none; color: #5eb0ff; font-size: 16px; cursor: pointer; padding: 8px 0;
         }
-        .wheel-title { flex: 1; text-align: center; font-weight: 700; font-size: 18px; margin-right: 48px; }
-        .wheel-wrap { position: relative; width: min(92vw, 320px); height: min(92vw, 320px); margin: 8px 0 16px; }
-        #wheel-canvas { width: 100%; height: 100%; border-radius: 50%; box-shadow: 0 8px 32px rgba(0,0,0,0.45); }
+        .wheel-title {
+            flex: 1; text-align: center; font-weight: 800; font-size: 20px; margin-right: 48px;
+            color: #f8fafc; letter-spacing: 0.02em;
+            text-shadow: 0 0 18px rgba(56, 189, 248, 0.55), 0 0 4px rgba(255, 255, 255, 0.35);
+        }
+        .wheel-wrap {
+            position: relative; z-index: 2;
+            width: min(92vw, 340px); height: min(92vw, 340px); margin: 4px 0 16px;
+            filter: drop-shadow(0 12px 40px rgba(0, 0, 0, 0.65)) drop-shadow(0 0 48px rgba(255, 150, 50, 0.22));
+        }
+        #wheel-canvas { width: 100%; height: 100%; display: block; border-radius: 50%; }
         .wheel-pointer {
-            position: absolute; top: -4px; left: 50%; transform: translateX(-50%);
-            width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent;
-            border-top: 22px solid #fff; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); z-index: 2;
+            position: absolute; top: -6px; left: 50%; transform: translateX(-50%);
+            width: 36px; height: 44px; z-index: 4; pointer-events: none;
+            filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 8px rgba(255, 200, 80, 0.45));
         }
+        .wheel-pointer svg { display: block; width: 100%; height: 100%; }
         .wheel-spin-btn {
-            width: 100%; max-width: 400px; padding: 16px; border: none; border-radius: 12px;
-            background: #0a84ff; color: #fff; font-size: 17px; font-weight: bold; cursor: pointer;
+            width: 100%; max-width: 400px; padding: 16px; border: none; border-radius: 14px;
+            background: linear-gradient(180deg, #ffe082 0%, #f5c542 35%, #c9921a 70%, #8b6914 100%);
+            color: #1a1208; font-size: 17px; font-weight: 800; cursor: pointer;
+            border: 1px solid rgba(255, 236, 179, 0.65);
+            box-shadow: 0 6px 24px rgba(245, 197, 66, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+            position: relative; z-index: 2;
         }
-        .wheel-spin-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        #wheel-status-line { color: #8e8e93; font-size: 13px; margin: 12px 0; text-align: center; max-width: 400px; }
+        .wheel-spin-btn:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.25); }
+        #wheel-status-line {
+            color: #a8a29e; font-size: 13px; margin: 12px 0; text-align: center; max-width: 400px;
+            position: relative; z-index: 2;
+        }
         #wheel-modal {
             display: none; position: fixed; inset: 0; z-index: 300; background: rgba(0,0,0,0.72);
             align-items: center; justify-content: center; padding: 20px; box-sizing: border-box;
@@ -89,10 +133,11 @@
             color: #fff; font-weight: 600; cursor: pointer;
         }
         .wheel-flapper {
-            position: absolute; top: -2px; left: 50%; width: 28px; height: 36px; margin-left: -14px;
-            transform-origin: 50% 8px; z-index: 3; transition: transform 0.08s ease-out;
+            position: absolute; top: 2px; left: 50%; width: 22px; height: 28px; margin-left: -11px;
+            transform-origin: 50% 6px; z-index: 5; transition: transform 0.08s ease-out;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
         }
-        .wheel-flapper svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5)); }
+        .wheel-flapper svg { display: block; width: 100%; height: 100%; }
     </style>
 </head>
 <body>
@@ -136,15 +181,33 @@
     </div>
 
     <div id="wheel-screen" aria-hidden="true">
+        <div class="wheel-bg-glow" aria-hidden="true"></div>
+        <div class="wheel-sparks" aria-hidden="true">
+            <i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
         <div class="wheel-topbar">
             <button type="button" class="wheel-back" id="wheel-back">← Назад</button>
             <div class="wheel-title">Колесо фортуны</div>
         </div>
         <div class="wheel-wrap">
-            <div class="wheel-flapper" id="wheel-flapper" aria-hidden="true">
-                <svg viewBox="0 0 28 36"><path d="M14 34 L4 8 Q14 2 24 8 Z" fill="#fff"/></svg>
-            </div>
             <canvas id="wheel-canvas" width="640" height="640"></canvas>
+            <div class="wheel-pointer" aria-hidden="true">
+                <svg viewBox="0 0 40 48" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <linearGradient id="wheelPtrGold" x1="20" y1="4" x2="20" y2="44" gradientUnits="userSpaceOnUse">
+                            <stop offset="0%" stop-color="#fff8dc"/>
+                            <stop offset="45%" stop-color="#f5c542"/>
+                            <stop offset="100%" stop-color="#9a7209"/>
+                        </linearGradient>
+                    </defs>
+                    <path d="M20 44 L5 14 Q20 3 35 14 Z" fill="url(#wheelPtrGold)" stroke="#6b4e09" stroke-width="1.2"/>
+                </svg>
+            </div>
+            <div class="wheel-flapper" id="wheel-flapper" aria-hidden="true">
+                <svg viewBox="0 0 22 28">
+                    <path d="M11 26 L3 7 Q11 2 19 7 Z" fill="#f5c542" stroke="#8b6914" stroke-width="0.8"/>
+                </svg>
+            </div>
         </div>
         <div id="wheel-status-line">Загрузка…</div>
         <button type="button" class="wheel-spin-btn" id="wheel-spin-btn" disabled>Крутить</button>
@@ -182,13 +245,18 @@
             { index: 7, label: "1000₽", prize: "decoy" },
             { index: 8, label: "PREMIUM", prize: "decoy" }
         ];
-        const PRIZE_COLORS = {
-            decoy: "#b45309",
-            vip: "#16a34a",
-            plus_one: "#2563eb",
-            express: "#0d9488",
-            empty: "#52525b"
+        /** Градиенты секторов 1–8 как на референсе (canvas). */
+        const SECTOR_VISUAL = {
+            1: { stops: ["#ffb347", "#e86a00", "#ffcc70"], glow: null },
+            2: { stops: ["#5cff9a", "#00e676", "#008f4a"], glow: "#39ff88", vip: true },
+            3: { stops: ["#f0a855", "#c2781a", "#ffd89a"], glow: null },
+            4: { stops: ["#60a5fa", "#2563eb", "#1e3a8a"], glow: null },
+            5: { stops: ["#5eead4", "#14b8a6", "#0f766e"], glow: null },
+            6: { stops: ["#71717a", "#3f3f46", "#18181b"], glow: null },
+            7: { stops: ["#fde047", "#eab308", "#ca8a04"], glow: null },
+            8: { stops: ["#fdba74", "#fb923c", "#ea580c"], glow: null }
         };
+        const WHEEL_LOGICAL = 640;
         const REQUEST_TIMEOUT_MS = 120000;
 
         const tgUser = tg.initDataUnsafe && tg.initDataUnsafe.user;
@@ -332,6 +400,105 @@
         const wheelModalClose = document.getElementById("wheel-modal-close");
         const wheelCtx = wheelCanvas.getContext("2d");
 
+        function initWheelCanvasDpr() {
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            wheelCanvas.width = WHEEL_LOGICAL * dpr;
+            wheelCanvas.height = WHEEL_LOGICAL * dpr;
+            wheelCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+        initWheelCanvasDpr();
+
+        function sectorFillGradient(sectorIndex, start, end, innerR, outerR) {
+            const vis = SECTOR_VISUAL[sectorIndex] || SECTOR_VISUAL[1];
+            const mid = (start + end) / 2;
+            const x0 = Math.cos(mid) * innerR * 0.5;
+            const y0 = Math.sin(mid) * innerR * 0.5;
+            const x1 = Math.cos(mid) * outerR;
+            const y1 = Math.sin(mid) * outerR;
+            const g = wheelCtx.createLinearGradient(x0, y0, x1, y1);
+            g.addColorStop(0, vis.stops[2]);
+            g.addColorStop(0.45, vis.stops[1]);
+            g.addColorStop(1, vis.stops[0]);
+            return g;
+        }
+
+        function drawWheelBackdrop(cx, cy, size) {
+            const glow = wheelCtx.createRadialGradient(cx, cy, size * 0.05, cx, cy, size * 0.52);
+            glow.addColorStop(0, "rgba(255, 180, 60, 0.2)");
+            glow.addColorStop(0.55, "rgba(255, 120, 30, 0.08)");
+            glow.addColorStop(1, "rgba(0, 0, 0, 0)");
+            wheelCtx.fillStyle = glow;
+            wheelCtx.beginPath();
+            wheelCtx.arc(cx, cy, size * 0.52, 0, Math.PI * 2);
+            wheelCtx.fill();
+        }
+
+        function drawWheelRim(innerR, outerR) {
+            wheelCtx.beginPath();
+            wheelCtx.arc(0, 0, outerR, 0, Math.PI * 2);
+            wheelCtx.arc(0, 0, innerR, 0, Math.PI * 2, true);
+            wheelCtx.closePath();
+            const rimG = wheelCtx.createRadialGradient(0, 0, innerR, 0, 0, outerR);
+            rimG.addColorStop(0, "#3f3f46");
+            rimG.addColorStop(0.5, "#27272a");
+            rimG.addColorStop(1, "#18181b");
+            wheelCtx.fillStyle = rimG;
+            wheelCtx.fill();
+            wheelCtx.lineWidth = 3;
+            wheelCtx.strokeStyle = "#f5c542";
+            wheelCtx.stroke();
+            wheelCtx.beginPath();
+            wheelCtx.arc(0, 0, outerR + 2, 0, Math.PI * 2);
+            wheelCtx.lineWidth = 2;
+            wheelCtx.strokeStyle = "rgba(255, 220, 120, 0.85)";
+            wheelCtx.stroke();
+        }
+
+        function drawWheelBulbs(bulbR, size, seg, tick) {
+            for (let b = 0; b < 16; b++) {
+                const ang = b * (Math.PI / 8) - Math.PI / 2;
+                const bx = Math.cos(ang) * bulbR;
+                const by = Math.sin(ang) * bulbR;
+                const on = ((b + tick) % 3) !== 0;
+                wheelCtx.beginPath();
+                wheelCtx.arc(bx, by, size * 0.016, 0, Math.PI * 2);
+                wheelCtx.fillStyle = on ? "#3f3f46" : "#1c1917";
+                wheelCtx.fill();
+                wheelCtx.strokeStyle = "#57534e";
+                wheelCtx.lineWidth = 1.5;
+                wheelCtx.stroke();
+                if (on) {
+                    wheelCtx.beginPath();
+                    wheelCtx.arc(bx, by, size * 0.009, 0, Math.PI * 2);
+                    wheelCtx.fillStyle = "#fffef0";
+                    wheelCtx.shadowColor = "rgba(255, 200, 80, 0.95)";
+                    wheelCtx.shadowBlur = 10;
+                    wheelCtx.fill();
+                    wheelCtx.shadowBlur = 0;
+                }
+            }
+        }
+
+        function drawWheelHub(size, innerR) {
+            const hubR = innerR * 0.72;
+            wheelCtx.beginPath();
+            wheelCtx.arc(0, 0, hubR, 0, Math.PI * 2);
+            const hubG = wheelCtx.createRadialGradient(-hubR * 0.25, -hubR * 0.35, hubR * 0.1, 0, 0, hubR);
+            hubG.addColorStop(0, "#fff8dc");
+            hubG.addColorStop(0.35, "#f5c542");
+            hubG.addColorStop(0.75, "#c9921a");
+            hubG.addColorStop(1, "#7a5a10");
+            wheelCtx.fillStyle = hubG;
+            wheelCtx.fill();
+            wheelCtx.lineWidth = 3;
+            wheelCtx.strokeStyle = "#ffe082";
+            wheelCtx.stroke();
+            wheelCtx.beginPath();
+            wheelCtx.arc(-hubR * 0.15, -hubR * 0.2, hubR * 0.22, 0, Math.PI * 2);
+            wheelCtx.fillStyle = "rgba(255, 255, 255, 0.35)";
+            wheelCtx.fill();
+        }
+
         function formatCountdown(seconds) {
             const s = Math.max(0, Math.floor(Number(seconds) || 0));
             const h = Math.floor(s / 3600);
@@ -351,65 +518,75 @@
         }
 
         function drawWheel(rotationDeg, allowTicks) {
-            const size = wheelCanvas.width;
+            const size = WHEEL_LOGICAL;
             const cx = size / 2;
             const cy = size / 2;
-            const r = size * 0.44;
-            const rim = size * 0.48;
             const seg = (2 * Math.PI) / WHEEL_SECTORS;
+            const innerR = size * 0.1;
+            const sliceR = size * 0.405;
+            const rimInner = size * 0.405;
+            const rimOuter = size * 0.488;
+            const bulbR = (rimInner + rimOuter) * 0.52;
+
             wheelCtx.clearRect(0, 0, size, size);
+            drawWheelBackdrop(cx, cy, size);
+
+            const tick = Math.floor((((rotationDeg % 360) + 360) % 360) / (360 / WHEEL_SECTORS));
+
             wheelCtx.save();
             wheelCtx.translate(cx, cy);
             wheelCtx.rotate((rotationDeg * Math.PI) / 180);
+
             for (let i = 0; i < WHEEL_SECTORS; i++) {
-                const entry = layoutEntry(i + 1);
+                const sectorIndex = i + 1;
+                const entry = layoutEntry(sectorIndex);
                 const start = i * seg - Math.PI / 2;
                 const end = start + seg;
                 wheelCtx.beginPath();
                 wheelCtx.moveTo(0, 0);
-                wheelCtx.arc(0, 0, r, start, end);
+                wheelCtx.arc(0, 0, sliceR, start, end);
                 wheelCtx.closePath();
-                wheelCtx.fillStyle = PRIZE_COLORS[entry.prize] || "#333";
+                wheelCtx.fillStyle = sectorFillGradient(sectorIndex, start, end, innerR, sliceR);
                 wheelCtx.fill();
-                wheelCtx.strokeStyle = "rgba(255,255,255,0.35)";
-                wheelCtx.lineWidth = 3;
+                wheelCtx.strokeStyle = "rgba(0, 0, 0, 0.45)";
+                wheelCtx.lineWidth = 2.5;
                 wheelCtx.stroke();
+                wheelCtx.beginPath();
+                wheelCtx.moveTo(0, 0);
+                wheelCtx.lineTo(Math.cos(start) * sliceR, Math.sin(start) * sliceR);
+                wheelCtx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+                wheelCtx.lineWidth = 1.5;
+                wheelCtx.stroke();
+
+                const vis = SECTOR_VISUAL[sectorIndex] || SECTOR_VISUAL[1];
                 wheelCtx.save();
                 wheelCtx.rotate(start + seg / 2);
                 wheelCtx.textAlign = "center";
-                wheelCtx.fillStyle = "#fff";
-                let fontSize = entry.label.length > 6 ? 28 : 34;
-                wheelCtx.font = "bold " + fontSize + "px -apple-system, sans-serif";
-                wheelCtx.shadowColor = "rgba(0,0,0,0.65)";
-                wheelCtx.shadowBlur = 6;
-                wheelCtx.fillText(entry.label, r * 0.58, 10);
+                wheelCtx.textBaseline = "middle";
+                let fontSize = entry.label.length > 7 ? 26 : entry.label.length > 5 ? 28 : 32;
+                wheelCtx.font = "800 " + fontSize + "px -apple-system, BlinkMacSystemFont, sans-serif";
+                wheelCtx.fillStyle = "#ffffff";
+                wheelCtx.shadowColor = vis.glow || "rgba(0, 0, 0, 0.75)";
+                wheelCtx.shadowBlur = vis.vip ? 18 : 8;
+                if (vis.vip) {
+                    wheelCtx.shadowOffsetX = 0;
+                    wheelCtx.shadowOffsetY = 0;
+                }
+                wheelCtx.fillText(entry.label, sliceR * 0.62, 0);
+                wheelCtx.shadowBlur = 0;
                 wheelCtx.restore();
             }
-            for (let i = 0; i < WHEEL_SECTORS; i++) {
-                const ang = i * seg - Math.PI / 2;
-                const px = Math.cos(ang) * rim;
-                const py = Math.sin(ang) * rim;
-                wheelCtx.beginPath();
-                wheelCtx.arc(px, py, size * 0.012, 0, 2 * Math.PI);
-                wheelCtx.fillStyle = "#f4f4f5";
-                wheelCtx.fill();
-                wheelCtx.strokeStyle = "#a1a1aa";
-                wheelCtx.lineWidth = 2;
-                wheelCtx.stroke();
-            }
-            wheelCtx.beginPath();
-            wheelCtx.arc(0, 0, r * 0.16, 0, 2 * Math.PI);
-            wheelCtx.fillStyle = "#eab308";
-            wheelCtx.fill();
-            wheelCtx.strokeStyle = "#fef08a";
-            wheelCtx.lineWidth = 4;
-            wheelCtx.stroke();
+
+            drawWheelRim(rimInner, rimOuter);
+            drawWheelBulbs(bulbR, size, seg, tick);
+            drawWheelHub(size, innerR);
+
             wheelCtx.restore();
+
             if (allowTicks) {
-                const tick = Math.floor((((rotationDeg % 360) + 360) % 360) / (360 / WHEEL_SECTORS));
                 if (tick !== lastPinTick) {
                     lastPinTick = tick;
-                    bumpFlapper(18);
+                    bumpFlapper(16);
                 }
             }
         }

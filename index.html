@@ -555,14 +555,6 @@
             wheelCtx.fill();
         }
 
-        function formatCountdown(seconds) {
-            const s = Math.max(0, Math.floor(Number(seconds) || 0));
-            const h = Math.floor(s / 3600);
-            const m = Math.floor((s % 3600) / 60);
-            const sec = s % 60;
-            return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
-        }
-
         function layoutEntry(sectorIndex) {
             return wheelLayout.find(function(s) { return s.index === sectorIndex; }) || { label: String(sectorIndex), prize: "decoy" };
         }
@@ -650,8 +642,11 @@
         function wheelStatusText(w) {
             if (!w) return "Нет данных";
             if (w.spin_unlimited) return "♾️ Безлимит — крути сколько угодно";
-            if (w.can_spin) return "✅ Сегодня можно крутить 1 раз";
-            return "⏳ Следующая прокрутка после 00:00 МСК · " + formatCountdown(w.seconds_until_reset);
+            if (w.cycle_open === false) {
+                return "⏳ Колесо обновится, когда администратор включит бота";
+            }
+            if (w.can_spin) return "✅ Можно крутить 1 раз за сегодняшний цикл";
+            return "✔️ Сегодня уже крутили. Колесо обновится завтра, когда бот включится.";
         }
 
         function applyWheelUi(w) {
@@ -901,16 +896,6 @@
             refreshWheelStatus();
         }
         drawWheel(0);
-
-        setInterval(function() {
-            if (wheelStatusCache && !wheelStatusCache.spin_unlimited && !wheelStatusCache.can_spin) {
-                let s = wheelStatusCache.seconds_until_reset;
-                if (s > 0) {
-                    wheelStatusCache.seconds_until_reset = s - 1;
-                    applyWheelUi(wheelStatusCache);
-                }
-            }
-        }, 1000);
 
         const imageUpload = document.getElementById("image-upload");
         const imageUploadBottom = document.getElementById("image-upload-bottom");
